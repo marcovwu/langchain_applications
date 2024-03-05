@@ -1,0 +1,12 @@
+loguru
+langchain
+transformers
+accelerate  # Zephyr, Gemma
+
+google-generativeai  # pip install -q -U google-generativeai  # Gemini
+langchain-google-genai  # pip install --upgrade --quiet  langchain-google-genai  # Gemini in Langchain
+
+# [Options]
+# langchain-community  # pip install -U langchain-community  # Langchain > WikipediaAPIWrapper`
+# wikipedia  # pip install wikipedia  # Wiki
+# pypdf  # pip install pypdf  # PDF
