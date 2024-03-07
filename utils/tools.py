@@ -14,9 +14,9 @@ from langchain.chains import (
     LLMChain, RetrievalQA, load_summarize_chain, MapReduceDocumentsChain, ReduceDocumentsChain, AnalyzeDocumentChain
 )
 from langchain_core.documents import Document
-from langchain_community.vectorstores import FAISS  # , Chroma
-from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS  # , Chroma
+from langchain_community.document_loaders import PyPDFLoader, UnstructuredWordDocumentLoader  # Docx2txtLoader
 from langchain_core.prompts import (
     ChatPromptTemplate, MessagesPlaceholder, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 )
@@ -126,12 +126,13 @@ critical discussion, rational argument, and systematic presentation.
     }
 
     # Options
+    SUPPORT_FORMATS = [".pdf", ".doc", ".txt", ".md"]
     MEMORY_MODE_CHOICES = "'default', 'langchain_default', 'conversation_summary', 'conversation_buffer'"
     CHAIN_MODE_CHOICES = "'summary-stuff', 'summary-refine', 'summary-map_reduce', 'stuff', 'refine', 'analyze'" + \
         ", 'map_reduce' 'rag_map_reduce-stuff, rag_map_reduce-refine', 'rag_retrieval'"
     AGENT_MODE_CHOICE = "'wiki'"
 
-    def __init__(self, model, input_info=None, memory_mode='', chain_mode='', agent_mode='', split=False):
+    def __init__(self, model, input_info='', memory_mode='', chain_mode='', agent_mode='', split=False):
         """
         :param chain_mode: one of LangChain.CHAIN_MODE_CHOICES
         :param agent_mode: one of LangChain.AGENT_MODE_CHOICE
@@ -200,6 +201,11 @@ critical discussion, rational argument, and systematic presentation.
                 docs = loader.load_and_split()
                 for doc in docs:
                     text += " " + doc.page_content
+            elif '.doc' in file:
+                loader = UnstructuredWordDocumentLoader(file)  # Docx2txtLoader(file)
+                docs = loader.load_and_split()
+                for doc in docs:
+                    text += " " + doc.page_content
             elif '.txt' in file or '.md' in file:
                 with open(file, "r", encoding="utf-8") as f:
                     text = f.read()
@@ -241,8 +247,28 @@ critical discussion, rational argument, and systematic presentation.
 
     def update_documents(self, input_info):
         # load
-        print('Loading file from %s' % input_info)
-        self.origin_text, self.documents = LangChain.load_file(input_info)
+        if os.path.isdir(input_info):
+            print('Loading file from %s' % input_info)
+            self.origin_text, self.documents = "", [Document(page_content="")]
+            # dir
+            # from langchain.document_loaders import DirectoryLoader
+            # loader = DirectoryLoader(input_info, show_progress=True)
+            # self.documents = loader.load_and_split()
+            # for doc in self.documents:
+            #     self.origin_text += " " + doc.page_content
+            # file
+            for filename in os.listdir(input_info):
+                origin_text, documents = LangChain.load_file(os.path.join(input_info, filename))
+                if origin_text != "no input ...":
+                    print(os.path.join(input_info, filename))
+                    self.origin_text += "\n\n\n" + origin_text
+                    self.documents += documents
+        elif os.path.isfile(input_info):
+            print('Loading file from %s' % input_info)
+            self.origin_text, self.documents = LangChain.load_file(input_info)
+        else:
+            print('No input file update to document')
+            self.origin_text, self.documents = "no input ...", [Document(page_content="")]
 
         # split
         if (
@@ -392,7 +418,7 @@ critical discussion, rational argument, and systematic presentation.
                 chunk_summary = self.map_chain.run([doc])
                 # Append that summary to your list
                 summary_list.append(chunk_summary)
-                print(f"Summary #{i} (chunk #{documents[i]}) - Preview: {chunk_summary[:50]} ... \n")
+                print(f"Summary #{i} (chunk #{documents[i].page_content[:50]}) - Preview: {chunk_summary[:50]} ... \n")
             summaries = "\n".join(summary_list)
             summaries = Document(page_content=summaries)
 
@@ -406,7 +432,7 @@ critical discussion, rational argument, and systematic presentation.
 
 
 class ChatBot(LangChain):
-    def __init__(self, model, input_info=None, memory_mode='', chain_mode='', agent_mode='', split=False):
+    def __init__(self, model, input_info='', memory_mode='', chain_mode='', agent_mode='', split=False):
         super().__init__(
             model, input_info=input_info, memory_mode=memory_mode, chain_mode=chain_mode, agent_mode=agent_mode,
             split=split
@@ -442,7 +468,7 @@ class ChatBot(LangChain):
         elif self.memory_mode == "langchain_default":
             self.chat_history.add_user_message(input_text)
             self.chat_history.add_ai_message(output_text)
-        else:
+        elif self.memory_mode == "default":
             self.chat_history.append(input_text)
             self.chat_history.append(output_text)
 

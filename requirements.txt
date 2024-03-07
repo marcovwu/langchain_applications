@@ -2,7 +2,11 @@ loguru
 langchain
 transformers
 accelerate  # Zephyr, Gemma
+scikit-learn
+tiktoken
+sentence-transformers
 
+# [Gemini llm]
 google-generativeai  # pip install -q -U google-generativeai  # Gemini
 langchain-google-genai  # pip install --upgrade --quiet  langchain-google-genai  # Gemini in Langchain
 
@@ -10,3 +14,13 @@ langchain-google-genai  # pip install --upgrade --quiet  langchain-google-genai 
 # langchain-community  # pip install -U langchain-community  # Langchain > WikipediaAPIWrapper`
 # wikipedia  # pip install wikipedia  # Wiki
 # pypdf  # pip install pypdf  # PDF
+
+# Use to load Microsoft Documents
+# """
+# import nltk
+# nltk.download('punkt')
+# nltk.download('averaged_perceptron_tagger')
+# """
+# pip install unstructured
+# pip install "unstructured[doc]"
+# docx2txt  # pip install --upgrade --quiet  docx2txt  # Docs
