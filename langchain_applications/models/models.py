@@ -1,12 +1,10 @@
 import os
-import sys
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from langchain_applications.utils.tools import ChatBot  # noqa: E402
 
 
 class LLMRunner(ChatBot):
-    LLM_CHOICES = "'Llama', 'Gemma', 'Zephyr', 'MeetingSummary' or 'Gemini'"
+    LLM_CHOICES = "'Llama', 'MiniCPM', 'Gemma', 'Zephyr', 'MeetingSummary' or 'Gemini'"
 
     @classmethod
     def load(cls, llmname, input_info='', memory_mode='', chain_mode='', agent_mode=''):
@@ -20,18 +18,29 @@ class LLMRunner(ChatBot):
         return llm_runner
 
 
-class LLama(ChatBot):
+class Llama(ChatBot):
     MAX_TOKENS = 8192
     CHUNK_SIZE = 4096
 
-    def __init__(self, input_info='', memory_mode='', chain_mode='', agent_mode='', max_tokens=8192, split=True):
-        from langchain_community.llms import LlamaCpp
-        from langchain.callbacks.manager import CallbackManager
-        from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
-        self.model = LlamaCpp(
-            model_path='models/llama-2-13b-chat.Q5_K_M.gguf', n_gpu_layers=-1, n_batch=512, n_ctx=16384, f16_kv=True,
-            max_tokens=max_tokens, callback_manager=CallbackManager([StreamingStdOutCallbackHandler()]), verbose=True,
+    def __init__(self, input_info='', memory_mode='', chain_mode='', agent_mode='', max_tokens=2048, split=True):
+        # [Llama Pretrained-13B] max_tokens=8192
+        # from langchain_community.llms import LlamaCpp
+        # from langchain.callbacks.manager import CallbackManager
+        # from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
+        # self.model = LlamaCpp(
+        #     model_path='models/llama-2-13b-chat.Q5_K_M.gguf', n_gpu_layers=-1, n_batch=512, n_ctx=16384, f16_kv=True,
+        #     max_tokens=max_tokens, callback_manager=CallbackManager([StreamingStdOutCallbackHandler()]), verbose=True,
+        # )
+
+        # [Llama Chinese-Alpaca-2-7B]
+        import torch
+        from transformers import AutoModelForCausalLM, pipeline
+        from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
+        model = AutoModelForCausalLM.from_pretrained("/mnt/models/Large_Language_Model/chinese-alpaca-2-7b")
+        self.llm_model = pipeline(
+            "text-generation", model=model, torch_dtype=torch.bfloat16, device_map="auto", max_new_tokens=max_tokens
         )
+        self.model = HuggingFacePipeline(pipeline=self.llm_model)
 
         # Initialize
         self.set_global_value()
@@ -43,6 +52,49 @@ class LLama(ChatBot):
         # variables
         ChatBot.MAX_TOKENS = self.MAX_TOKENS
         ChatBot.CHUNK_SIZE = self.CHUNK_SIZE
+
+    def count_tokens(self, string):
+        return len(self.llm_model.tokenizer(string)["input_ids"])
+
+
+class MiniCPM(ChatBot):
+    MAX_TOKENS = 8192
+    CHUNK_SIZE = 4096
+
+    def __init__(self, input_info='', memory_mode='', chain_mode='', agent_mode='', max_tokens=2048, split=True):
+        # [Llama Pretrained-13B] max_tokens=8192
+        # from langchain_community.llms import LlamaCpp
+        # from langchain.callbacks.manager import CallbackManager
+        # from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
+        # self.model = LlamaCpp(
+        #     model_path='models/llama-2-13b-chat.Q5_K_M.gguf', n_gpu_layers=-1, n_batch=512, n_ctx=16384, f16_kv=True,
+        #     max_tokens=max_tokens, callback_manager=CallbackManager([StreamingStdOutCallbackHandler()]), verbose=True,
+        # )
+
+        # [Llama Chinese-Alpaca-2-7B]
+        import torch
+        from transformers import AutoModelForCausalLM, pipeline
+        from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
+        model = AutoModelForCausalLM.from_pretrained(
+            "/mnt/models/Large_Language_Model/openbmb-minicpm-2B-sft-fp32-llama")
+        self.llm_model = pipeline(
+            "text-generation", model=model, torch_dtype=torch.bfloat16, device_map="auto", max_new_tokens=max_tokens
+        )
+        self.model = HuggingFacePipeline(pipeline=self.llm_model)
+
+        # Initialize
+        self.set_global_value()
+        super().__init__(
+            self.model, input_info=input_info, memory_mode=memory_mode, chain_mode=chain_mode, agent_mode=agent_mode,
+            split=split)
+
+    def set_global_value(self):
+        # variables
+        ChatBot.MAX_TOKENS = self.MAX_TOKENS
+        ChatBot.CHUNK_SIZE = self.CHUNK_SIZE
+
+    def count_tokens(self, string):
+        return len(self.llm_model.tokenizer(string)["input_ids"])
 
 
 class Gemma(ChatBot):

@@ -1,9 +1,7 @@
 import os
-import sys
 import argparse
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from langchain_applications.models.models import LLMRunner  # noqa: E402
+from langchain_applications.models.models import LLMRunner
 
 
 class Runner:

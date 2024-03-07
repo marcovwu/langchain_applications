@@ -418,7 +418,8 @@ critical discussion, rational argument, and systematic presentation.
                 chunk_summary = self.map_chain.run([doc])
                 # Append that summary to your list
                 summary_list.append(chunk_summary)
-                print(f"Summary #{i} (chunk #{documents[i].page_content[:50]}) - Preview: {chunk_summary[:50]} ... \n")
+                print(
+                    f"Summary #{i} (chunk #{documents[i].page_content[:250]}) - Preview: {chunk_summary[:250]} ... \n")
             summaries = "\n".join(summary_list)
             summaries = Document(page_content=summaries)
 

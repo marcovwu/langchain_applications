@@ -1,11 +1,13 @@
 # LangChain Applications
 
+## Install
 ```
-# Install
+git clone https://github.com/marcovwu/langchain_applications.git
 cd langchain_applications
-pip install -r requirements.txt
+pip install -e .
+```
 
-# Run
-cd ../
+## Run
+```
 python langchain_applications/runner.py -h  # or watch test.sh
 ```
