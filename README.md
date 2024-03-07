@@ -7,5 +7,5 @@ pip install -r requirements.txt
 
 # Run
 cd ../
-python langchain_applications/run.py -h  # or watch test.sh
+python langchain_applications/runner.py -h  # or watch test.sh
 ```
