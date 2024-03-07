@@ -9,7 +9,7 @@ class LLMRunner(ChatBot):
     LLM_CHOICES = "'Llama', 'Gemma', 'Zephyr', 'MeetingSummary' or 'Gemini'"
 
     @classmethod
-    def load(cls, llmname, input_info=None, memory_mode='', chain_mode='', agent_mode=''):
+    def load(cls, llmname, input_info='', memory_mode='', chain_mode='', agent_mode=''):
         llm_class = globals().get(llmname, None)
         if llm_class:
             llm_runner = llm_class(
@@ -24,7 +24,7 @@ class LLama(ChatBot):
     MAX_TOKENS = 8192
     CHUNK_SIZE = 4096
 
-    def __init__(self, input_info=None, memory_mode='', chain_mode='', agent_mode='', max_tokens=8192, split=True):
+    def __init__(self, input_info='', memory_mode='', chain_mode='', agent_mode='', max_tokens=8192, split=True):
         from langchain_community.llms import LlamaCpp
         from langchain.callbacks.manager import CallbackManager
         from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
@@ -49,7 +49,7 @@ class Gemma(ChatBot):
     MAX_TOKENS = 8192
     CHUNK_SIZE = 4096
 
-    def __init__(self, input_info=None, memory_mode='', chain_mode='', agent_mode='', max_tokens=8192, split=True):
+    def __init__(self, input_info='', memory_mode='', chain_mode='', agent_mode='', max_tokens=8192, split=True):
         # [LlamaCPP] url: https://huggingface.co/brittlewis12/gemma-7b-GGUF
         from langchain_community.llms import LlamaCpp
         from langchain.callbacks.manager import CallbackManager
@@ -165,7 +165,7 @@ Human: {input}
 AI:""" % ChatBot.PROMPT_MEMORY
     }
 
-    def __init__(self, input_info=None, memory_mode='', chain_mode='', agent_mode='', max_tokens=256, split=True):
+    def __init__(self, input_info='', memory_mode='', chain_mode='', agent_mode='', max_tokens=256, split=True):
         import torch
         from transformers import pipeline
         from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
@@ -284,7 +284,7 @@ critical discussion, rational argument, and systematic presentation.
 """
     }
 
-    def __init__(self, input_info=None, memory_mode='', chain_mode='', agent_mode='', max_tokens=512, split=True):
+    def __init__(self, input_info='', memory_mode='', chain_mode='', agent_mode='', max_tokens=512, split=True):
         from transformers import pipeline
         from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
         self.llm_model = pipeline(
@@ -328,7 +328,7 @@ critical discussion, rational argument, and systematic presentation.
 class Gemini(ChatBot):
     GOOGLE_API_KEY = "AIzaSyApdfSReJd0nL7Zf1fR_OaTIk9HkHQyHDg"  # Gmail User Name: marcowu1999
 
-    def __init__(self, input_info=None, memory_mode='', chain_mode='', agent_mode=''):
+    def __init__(self, input_info='', memory_mode='', chain_mode='', agent_mode=''):
         # [Langchain]
         if "GOOGLE_API_KEY" not in os.environ:
             os.environ["GOOGLE_API_KEY"] = Gemini.GOOGLE_API_KEY

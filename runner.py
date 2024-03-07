@@ -81,7 +81,7 @@ if __name__ == "__main__":
     # Runner
     parser.add_argument('--run_mode', type=str, default='chat', help="'chat' or 'summary' or 'chat_summary")
     parser.add_argument('--file', type=str, default='', help="kd_sharing-1h.txt, RKD.pdf")
-    parser.add_argument('--infolder', type=str, default=os.path.join(os.path.dirname(__file__), 'examples'), help="")
+    parser.add_argument('--infolder', type=str, default='', help="input folder")
     parser.add_argument('--outfolder', type=str, default=os.path.join(os.path.dirname(__file__), 'examples'), help="")
     args = parser.parse_args()
 
