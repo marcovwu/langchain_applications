@@ -27,6 +27,7 @@ class LangChain(ABC):
     MAX_TOKENS = 8192
     CHUNK_SIZE = 2048
     CHUNK_OVERLAP = 0
+    SPLIT_DOCS = False
 
     # Prompts
     NAME = "Kneron"
@@ -132,15 +133,14 @@ critical discussion, rational argument, and systematic presentation.
         ", 'map_reduce' 'rag_map_reduce-stuff, rag_map_reduce-refine', 'rag_retrieval'"
     AGENT_MODE_CHOICE = "'wiki'"
 
-    def __init__(self, model, input_info='', memory_mode='', chain_mode='', agent_mode='', split=False):
+    def __init__(self, model, input_info='', memory_mode='', chain_mode='', agent_mode=''):
         """
-        :param chain_mode: one of LangChain.CHAIN_MODE_CHOICES
-        :param agent_mode: one of LangChain.AGENT_MODE_CHOICE
+        :param chain_mode: one of self.CHAIN_MODE_CHOICES
+        :param agent_mode: one of self.AGENT_MODE_CHOICE
         """
 
         # init info
         self.model = model
-        self.split = split
         self.chain_keys = {"input": "input", "output": "text", "memory": "chat_history"}
         self.memory_mode = memory_mode
         self.chain_mode = chain_mode
@@ -148,7 +148,7 @@ critical discussion, rational argument, and systematic presentation.
 
         # init input
         self.text_splitter = CharacterTextSplitter.from_tiktoken_encoder(
-            chunk_size=LangChain.CHUNK_SIZE, chunk_overlap=LangChain.CHUNK_OVERLAP)
+            chunk_size=self.CHUNK_SIZE, chunk_overlap=self.CHUNK_OVERLAP)
         self.update_documents(input_info)
 
         # init memory
@@ -181,8 +181,8 @@ critical discussion, rational argument, and systematic presentation.
         elif 'rag_map_reduce' in self.chain_mode:
             self.text_splitter = RecursiveCharacterTextSplitter(
                 separators=["\n\n", "\n", "\t"],
-                chunk_size=LangChain.CHUNK_SIZE,
-                chunk_overlap=LangChain.CHUNK_OVERLAP)
+                chunk_size=self.CHUNK_SIZE,
+                chunk_overlap=self.CHUNK_OVERLAP)
             self.init_rag_map_reduce_chain(chain_type=self.chain_mode.split('-')[1])
         elif 'rag_retrieval' == self.chain_mode:
             self.init_rag_retrieval_chain(documents=self.documents)  # , chain_type=self.chain_mode.split('-')[1])
@@ -247,58 +247,62 @@ critical discussion, rational argument, and systematic presentation.
 
     def update_documents(self, input_info):
         # load
-        if os.path.isdir(input_info):
-            print('Loading file from %s' % input_info)
-            self.origin_text, self.documents = "", [Document(page_content="")]
-            # dir
-            # from langchain.document_loaders import DirectoryLoader
-            # loader = DirectoryLoader(input_info, show_progress=True)
-            # self.documents = loader.load_and_split()
-            # for doc in self.documents:
-            #     self.origin_text += " " + doc.page_content
-            # file
-            for filename in os.listdir(input_info):
-                origin_text, documents = LangChain.load_file(os.path.join(input_info, filename))
-                if origin_text != "no input ...":
-                    print(os.path.join(input_info, filename))
-                    self.origin_text += "\n\n\n" + origin_text
-                    self.documents += documents
-        elif os.path.isfile(input_info):
-            print('Loading file from %s' % input_info)
-            self.origin_text, self.documents = LangChain.load_file(input_info)
+        if not isinstance(input_info, str):
+            print(f'No update any document. unsupport format for {input_info}')
+            return '', [Document(page_content="")]
         else:
-            print('No input file update to document')
-            self.origin_text, self.documents = "no input ...", [Document(page_content="")]
+            if os.path.isdir(input_info):
+                print('Loading file from %s' % input_info)
+                self.origin_text, self.documents = "", [Document(page_content="")]
+                # dir
+                # from langchain.document_loaders import DirectoryLoader
+                # loader = DirectoryLoader(input_info, show_progress=True)
+                # self.documents = loader.load_and_split()
+                # for doc in self.documents:
+                #     self.origin_text += " " + doc.page_content
+                # file
+                for filename in os.listdir(input_info):
+                    origin_text, documents = LangChain.load_file(os.path.join(input_info, filename))
+                    if origin_text != "no input ...":
+                        print(os.path.join(input_info, filename))
+                        self.origin_text += "\n\n\n" + origin_text
+                        self.documents += documents
+            elif os.path.isfile(input_info):
+                print('Loading file from %s' % input_info)
+                self.origin_text, self.documents = LangChain.load_file(input_info)
+            else:
+                print('No input file update to document')
+                self.origin_text, self.documents = "no input ...", [Document(page_content="")]
 
-        # split
-        if (
-            self.split
-            or 'refine' == self.chain_mode
-            or 'rag_map_reduce' in self.chain_mode
-            or 'map_reduce' == self.chain_mode
-        ):
-            self.documents = self.text_splitter.split_documents(self.documents)
+            # split
+            if (
+                self.SPLIT_DOCS
+                or 'refine' == self.chain_mode
+                or 'rag_map_reduce' in self.chain_mode
+                or 'map_reduce' == self.chain_mode
+            ):
+                self.documents = self.text_splitter.split_documents(self.documents)
 
-        # rag
-        if 'rag_map_reduce' in self.chain_mode:
-            self.update_embeding_documents(self.documents)
+            # rag
+            if 'rag_map_reduce' in self.chain_mode:
+                self.update_embeding_documents(self.documents)
 
-        return self.origin_text, self.documents
+            return self.origin_text, self.documents
 
     def init_langchain_default_memory(self):
-        prompt = PromptTemplate.from_template(LangChain.CHATBOT_PROMPT["langchain_default"])
+        prompt = PromptTemplate.from_template(self.CHATBOT_PROMPT["langchain_default"])
         self.chat_history = ChatMessageHistory(memory_key=self.chain_keys["memory"])
         return prompt
 
     def init_conversation_summary_memory(self):
-        prompt = PromptTemplate.from_template(LangChain.CHATBOT_PROMPT["conversation_summary"])
+        prompt = PromptTemplate.from_template(self.CHATBOT_PROMPT["conversation_summary"])
         self.chat_history = ConversationSummaryMemory(llm=self.model)
         return prompt
 
     def init_conversation_buffer_memory(self):
         prompt = ChatPromptTemplate(
             messages=[
-                SystemMessagePromptTemplate.from_template(LangChain.PROMPT_SYSTEM),
+                SystemMessagePromptTemplate.from_template(self.PROMPT_SYSTEM),
                 MessagesPlaceholder(variable_name=self.chain_keys["memory"]),
                 HumanMessagePromptTemplate.from_template("{input}"),
             ]
@@ -312,14 +316,14 @@ critical discussion, rational argument, and systematic presentation.
 
     def init_stuff_chain(self):
         # chain api
-        prompt = PromptTemplate.from_template(LangChain.SUMMARY_PROMPT["summary"])
+        prompt = PromptTemplate.from_template(self.SUMMARY_PROMPT["summary"])
         self.llm_chain = LLMChain(llm=self.model, prompt=prompt)
         self.chain = StuffDocumentsChain(llm_chain=self.llm_chain, document_variable_name="text")
 
     def init_refine_chain(self):
         # chain api
-        prompt = PromptTemplate.from_template(LangChain.SUMMARY_PROMPT["summary"])
-        refine_prompt = PromptTemplate.from_template(LangChain.SUMMARY_PROMPT["refine"])
+        prompt = PromptTemplate.from_template(self.SUMMARY_PROMPT["summary"])
+        refine_prompt = PromptTemplate.from_template(self.SUMMARY_PROMPT["refine"])
         self.chain = load_summarize_chain(
             llm=self.model, chain_type="refine", question_prompt=prompt, refine_prompt=refine_prompt,
             return_intermediate_steps=True,  # input_key=self.chain_keys["input"], output_key=self.chain_keys["output"],
@@ -330,14 +334,14 @@ critical discussion, rational argument, and systematic presentation.
 
     def init_map_reduce_chain(self):
         # map-reduce api
-        map_chain = LLMChain(llm=self.model, prompt=LangChain.SUMMARY_PROMPT["map"])
-        reduce_prompt = PromptTemplate.from_template(LangChain.SUMMARY_PROMPT["reduce"])
+        map_chain = LLMChain(llm=self.model, prompt=self.SUMMARY_PROMPT["map"])
+        reduce_prompt = PromptTemplate.from_template(self.SUMMARY_PROMPT["reduce"])
         reduce_chain = LLMChain(llm=self.model, prompt=reduce_prompt)
         combine_documents_chain = StuffDocumentsChain(llm_chain=reduce_chain, document_variable_name="docs")
         reduce_documents_chain = ReduceDocumentsChain(
             combine_documents_chain=combine_documents_chain,
             collapse_documents_chain=combine_documents_chain,  # If documents exceed context for `StuffDocumentsChain`
-            token_max=LangChain.MAX_TOKENS,  # The maximum number of tokens to group documents into.
+            token_max=self.MAX_TOKENS,  # The maximum number of tokens to group documents into.
         )
         self.chain = MapReduceDocumentsChain(
             llm_chain=map_chain, reduce_documents_chain=reduce_documents_chain,
@@ -357,12 +361,12 @@ critical discussion, rational argument, and systematic presentation.
         """
 
         # map
-        map_prompt_template = PromptTemplate(template=LangChain.SUMMARY_PROMPT["rag_map"], input_variables=["text"])
+        map_prompt_template = PromptTemplate(template=self.SUMMARY_PROMPT["rag_map"], input_variables=["text"])
         self.map_chain = load_summarize_chain(llm=self.model, chain_type=chain_type, prompt=map_prompt_template)
 
         # reduce
         combine_prompt_template = PromptTemplate(
-            template=LangChain.SUMMARY_PROMPT["rag_combine"], input_variables=["text"])
+            template=self.SUMMARY_PROMPT["rag_combine"], input_variables=["text"])
         self.reduce_chain = load_summarize_chain(llm=self.model, chain_type=chain_type, prompt=combine_prompt_template)
 
         # overall
@@ -377,7 +381,7 @@ critical discussion, rational argument, and systematic presentation.
 
         # chains
         prompt = PromptTemplate.from_template(
-            LangChain.CHATBOT_PROMPT["retrievalqa" + "_" + self.memory_mode if self.memory_mode else ""])
+            self.CHATBOT_PROMPT["retrievalqa" + "_" + self.memory_mode if self.memory_mode else ""])
         chain = LLMChain(llm=self.model, prompt=prompt, verbose=True)
         combine_documents_chain = StuffDocumentsChain(llm_chain=chain, document_variable_name="docs")
 
@@ -433,11 +437,8 @@ critical discussion, rational argument, and systematic presentation.
 
 
 class ChatBot(LangChain):
-    def __init__(self, model, input_info='', memory_mode='', chain_mode='', agent_mode='', split=False):
-        super().__init__(
-            model, input_info=input_info, memory_mode=memory_mode, chain_mode=chain_mode, agent_mode=agent_mode,
-            split=split
-        )
+    def __init__(self, model, **kwargs):
+        super().__init__(model, **kwargs)
 
     def chat_preprocesss(self, text_with_prompt, text):
         return text_with_prompt, text
@@ -446,7 +447,7 @@ class ChatBot(LangChain):
         return len(string.split(" "))
 
     def obtain_default_prompt(self):
-        return ChatBot.CHATBOT_PROMPT["default"] + "".join(self.chat_history)
+        return self.CHATBOT_PROMPT["default"] + "".join(self.chat_history)
 
     def obtain_memory(self):
         if "conversation" in self.memory_mode:
@@ -454,8 +455,8 @@ class ChatBot(LangChain):
         elif self.memory_mode == "langchain_default":
             msg = self.chat_history.messages
         else:
-            msg, words = self.obtain_default_prompt(), self.count_tokens(ChatBot.CHATBOT_PROMPT["default"])
-            while self.count_tokens(msg) > ChatBot.MAX_TOKENS - words:
+            msg, words = self.obtain_default_prompt(), self.count_tokens(self.CHATBOT_PROMPT["default"])
+            while self.count_tokens(msg) > self.MAX_TOKENS - words:
                 self.chat_history.popleft()  # Human
                 self.chat_history.popleft()  # AI
                 msg = self.obtain_default_prompt()
@@ -477,11 +478,29 @@ class ChatBot(LangChain):
         input_text, output_text = text, response_text
         return input_text, output_text
 
-    def summary(self):
-        response_text = ''
+    def _inference(self, module, input_val, output_key, text_with_prompt, text):
+        # Run Large Language Model
+        if module is not None:
+            response_text = module(input_val) if output_key is None else module(input_val)[output_key]
+            if not isinstance(response_text, str):
+                response_text = response_text.content
+
+            # Post-processing
+            in_text, out_text = self.chat_postprocess(text_with_prompt, text, response_text)
+            self.update_memory(in_text, out_text)
+        else:
+            response_text = ''
+        return response_text
+
+    def summary(self, input_info=None):
+        # Initialize
+        _module, input_val, output_key = None, self.documents, None
+        if isinstance(input_info, str):
+            self.update_documents(input_info)
+
+        # Chain
         if self.chain is not None:
-            _module, input_val, out_key = self.chain, self.documents, None
-            # chain
+            _module = self.chain
             if 'refine' == self.chain_mode:
                 _module = self.chain
                 input_val = {"input_documents": self.documents}  # "\n\n".join(result["intermediate_steps"][:3])
@@ -491,38 +510,28 @@ class ChatBot(LangChain):
                 _module = self.chain.run
                 if 'analyze' == self.chain_mode:
                     input_val = self.origin_text
-            print('Obtaining summary ...')
-            response_text = _module(input_val) if out_key is None else _module(input_val)[out_key]
 
-        # Langchain Agent
+        # Agent
         if self.agent is not None:
-            response_text = self.agent.run("Can you please provide a quick summary of Napoleon Bonaparte? \
-                Then do a separate search and tell me what the commonalities are with Serena Williams")
+            _module, input_val = self.agent.run, "Can you please provide a quick summary of Napoleon Bonaparte? \
+                Then do a separate search and tell me what the commonalities are with Serena Williams"
 
-        # TODO: post-processing
-        in_text, out_text = self.chat_postprocess(self.origin_text, self.origin_text, response_text)
-        self.update_memory(in_text, out_text)
-
-        return response_text
+        # Run
+        print('Obtaining summary ...')
+        return self._inference(_module, input_val, output_key, self.origin_text, self.origin_text)
 
     def chat(self, text_with_prompt, text, use_history=False):
-        # pre-processing
+        # Initialize & Pre-processing
+        _module, input_val, output_key = self.model.invoke, text_with_prompt, None
         text_with_prompt, text = self.chat_preprocesss(text_with_prompt, text)
 
-        # llm
-        _module, input_val, out_key = self.model.invoke, text_with_prompt, None
+        # Chain
         if self.chat_history is not None and use_history:
             if self.memory_mode == "default":
                 input_val = self.obtain_memory() + text_with_prompt
         if self.memory_chain is not None:
             input_val = {self.chain_keys["input"]: text_with_prompt, self.chain_keys["memory"]: self.obtain_memory()}
-            _module, out_key = self.memory_chain.invoke, self.chain_keys["output"]
-        response_text = _module(input_val) if out_key is None else _module(input_val)[out_key]
-        if not isinstance(response_text, str):
-            response_text = response_text.content
+            _module, output_key = self.memory_chain.invoke, self.chain_keys["output"]
 
-        # post-processing
-        in_text, out_text = self.chat_postprocess(text_with_prompt, text, response_text)
-        self.update_memory(in_text, out_text)
-
-        return response_text
+        # Run
+        return self._inference(_module, input_val, output_key, text_with_prompt, text)

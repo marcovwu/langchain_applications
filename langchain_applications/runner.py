@@ -11,7 +11,8 @@ class Runner:
 
         # Large Language Model
         self.llm_runner = LLMRunner.load(
-            self.llmname, self.input_info, self.memory_mode, self.chain_mode, self.agent_mode)
+            self.llmname, input_info=self.input_info, memory_mode=self.memory_mode, chain_mode=self.chain_mode,
+            agent_mode=self.agent_mode)
 
     @staticmethod
     def save_file(text, save_file_name='', write='w'):
@@ -55,7 +56,7 @@ class Runner:
     def summary(self, new_file_path=None, save_file_name=''):
         if self.llm_runner is not None:
             # summary
-            summary = self.llm_runner.summary()
+            summary = self.llm_runner.summary(new_file_path)
             Runner.save_file(summary, save_file_name=save_file_name, write='w')
             print(summary)
 
