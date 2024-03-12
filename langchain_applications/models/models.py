@@ -35,8 +35,10 @@ class Llama(ChatBot):
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
         from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
-        tokenizer = AutoTokenizer.from_pretrained("/data1/marco.wu/models/Large_Language_Model/chinese-alpaca-2-7b")
-        model = AutoModelForCausalLM.from_pretrained("/data1/marco.wu/models/Large_Language_Model/chinese-alpaca-2-7b")
+        tokenizer = AutoTokenizer.from_pretrained(
+            "/data1/marco.wu/models/Large_Language_Model/chinese-alpaca-2-7b", device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained(
+            "/data1/marco.wu/models/Large_Language_Model/chinese-alpaca-2-7b", device_map="auto")
         self.llm_model = pipeline(
             "text-generation", model=model, tokenizer=tokenizer, torch_dtype=torch.bfloat16, device_map="auto",
             max_new_tokens=1024
@@ -61,13 +63,16 @@ class MiniCPM(ChatBot):
         from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
         from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
         tokenizer = AutoTokenizer.from_pretrained(
-            "/data1/marco.wu/models/Large_Language_Model/openbmb-minicpm-2B-sft-fp32-llama")
+            "/data1/marco.wu/models/Large_Language_Model/openbmb-minicpm-2B-sft-fp32-llama", device_map="auto")
         model = AutoModelForCausalLM.from_pretrained(
-            "/data1/marco.wu/models/Large_Language_Model/openbmb-minicpm-2B-sft-fp32-llama")
+            "/data1/marco.wu/models/Large_Language_Model/openbmb-minicpm-2B-sft-fp32-llama", device_map="auto")
         self.llm_model = pipeline(
             "text-generation", model=model, tokenizer=tokenizer, torch_dtype=torch.bfloat16, device_map="auto",
             max_new_tokens=1024
         )
+        self.llm_model = pipeline(
+            "text-generation", model="/data1/marco.wu/models/Large_Language_Model/openbmb-minicpm-2B-sft-fp32-llama",
+            torch_dtype=torch.bfloat16, device_map="auto", max_new_tokens=2048)
         self.model = HuggingFacePipeline(pipeline=self.llm_model)
 
         # Initialize
@@ -100,7 +105,7 @@ class Gemma(ChatBot):
         # self.model = HuggingFacePipeline(pipeline=self.llm_model)
 
         # [HuggingFace]
-        # self.tokenizer = AutoTokenizer.from_pretrained("google/gemma-7b-it")
+        # self.tokenizer = AutoTokenizer.from_pretrained("google/gemma-7b-it", device_map="auto")
         # self.model = AutoModelForCausalLM.from_pretrained("google/gemma-7b-it", device_map="auto")
 
         # Initialize
@@ -113,7 +118,7 @@ class Gemma(ChatBot):
 class Zephyr(ChatBot):
     SPLIT_DOCS = True
     SUMMARY_PROMPT = {
-        "summary": """<|system|>\nWrite a concise summary of the following over 1000 words:</s>
+        "summary": """<|system|>\nWrite a concise summary of the following about 1000 words:</s>
 <|assistant|>
 "{text}"</s>
 
@@ -193,7 +198,7 @@ AI:""" % ChatBot.PROMPT_MEMORY
         from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
         self.llm_model = pipeline(
             "text-generation", model="HuggingFaceH4/zephyr-7b-beta", torch_dtype=torch.bfloat16, device_map="auto",
-            max_new_tokens=1024)
+            max_new_tokens=2048)
         self.model = HuggingFacePipeline(pipeline=self.llm_model)
 
         # Initialize
@@ -241,58 +246,9 @@ class MeetingSummary(ChatBot):
     CHUNK_SIZE = 1024
     CHUNK_OVERLAP = 0
     SPLIT_DOCS = True
+    CHATBOT_PROMPT = {"default": "", "conversation_summary": "", "retrievalqa_default": "", "retrievalqa": ""}
     SUMMARY_PROMPT = {
-        "summary": """\nWrite a concise summary of the following over 1000 words:
-"{text}"
-
-CONCISE SUMMARY:""",
-        "refine": (
-            "Your job is to produce a final summary\n"
-            "We have provided an existing summary up to a certain point: {existing_answer}\n"
-            "We have the opportunity to refine the existing summary"
-            "(only if needed) with some more context below.\n"
-            "------------\n"
-            "{text}\n"
-            "------------\n"
-            "Given the new context, refine the original summary in Italian"
-            "If the context isn't useful, return the original summary."
-        ),
-        "map": """The following is a set of documents:
-{docs}
-Based on this list of docs, please identify the main themes
-Helpful Answer:""",  # hub.pull("rlm/map-prompt")
-        "reduce": """The following is set of summaries:
-{docs}
-Take these and distill it into a final, consolidated summary of the main themes.
-Helpful Answer:""",
-        "rag_map": """
-You will be given a single passage of a book. This section will be enclosed in triple backticks (```)
-Your goal is to give a summary of this section so that a reader will have a full understanding of what happened.
-Your response should be at least three paragraphs and fully encompass what was said in the passage.
-
-```{text}```
-FULL SUMMARY:
-""",
-        "rag_combine": """
-You will be given a series of summaries from a book. The summaries will be enclosed in triple backticks (```)
-Your goal is to give a verbose summary of what happened in the story.
-The reader should be able to grasp what happened in the book.
-
-```{text}```
-VERBOSE SUMMARY:
-""",
-        "level1": """
-Please provide a summary of the following text.
-Please provide your output in a manner that a 5 year old would understand
-
-TEXT:
-Philosophy (from Greek: φιλοσοφία, philosophia, 'love of wisdom') \
-is the systematized study of general and fundamental questions, \
-such as those about existence, reason, knowledge, values, mind, and language. \
-Some sources claim the term was coined by Pythagoras (c. 570 – c. 495 BCE), \
-although this theory is disputed by some. Philosophical methods include questioning, \
-critical discussion, rational argument, and systematic presentation.
-"""
+        "summary": "", "refine": (), "map": "", "reduce": "", "rag_map": "", "rag_combine": "", "level1": ""
     }
 
     def __init__(self, **kwargs):

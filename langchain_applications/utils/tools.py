@@ -74,7 +74,7 @@ Helpful answer:
 """
     }
     SUMMARY_PROMPT = {
-        "summary": """Write a concise summary of the following over 1000 words:
+        "summary": """Write a concise summary of the following about 1000 words:
 "{text}"
 CONCISE SUMMARY:""",
         "refine": (
@@ -217,7 +217,7 @@ critical discussion, rational argument, and systematic presentation.
             if k in self.chain_keys and isinstance(self.chain_keys[k], str) and self.chain_keys[k]:
                 self.chain_keys[k] = v
 
-    def update_embeding_documents(self, documents):
+    def update_embeding_documents(self, documents, top_k=11):
         embeddings = HuggingFaceEmbeddings()  # model_name="thenlper/gte-large"
         vectors = embeddings.embed_documents([x.page_content for x in documents])
         # documents = self.text_splitter.split_documents(documents)
@@ -226,7 +226,7 @@ critical discussion, rational argument, and systematic presentation.
 
         # Perform K-means clustering
         if vectors:
-            num_clusters = 11
+            num_clusters = min(top_k, len(vectors))
             kmeans = KMeans(n_clusters=num_clusters, random_state=42).fit(vectors)
 
             # Perform t-SNE and reduce to 2 dimensions
@@ -365,8 +365,7 @@ critical discussion, rational argument, and systematic presentation.
         self.map_chain = load_summarize_chain(llm=self.model, chain_type=chain_type, prompt=map_prompt_template)
 
         # reduce
-        combine_prompt_template = PromptTemplate(
-            template=self.SUMMARY_PROMPT["rag_combine"], input_variables=["text"])
+        combine_prompt_template = PromptTemplate(template=self.SUMMARY_PROMPT["rag_combine"], input_variables=["text"])
         self.reduce_chain = load_summarize_chain(llm=self.model, chain_type=chain_type, prompt=combine_prompt_template)
 
         # overall
@@ -424,11 +423,13 @@ critical discussion, rational argument, and systematic presentation.
                 summary_list.append(chunk_summary)
                 print(
                     f"Summary #{i} (chunk #{documents[i].page_content[:250]}) - Preview: {chunk_summary[:250]} ... \n")
-            summaries = "\n".join(summary_list)
-            summaries = Document(page_content=summaries)
 
             # Reduce Summaries
-            output = self.reduce_chain.run([summaries])
+            output = summary_list[0] if summary_list else ''
+            if len(summary_list) > 1:
+                summaries = "\n".join(summary_list)
+                summaries = Document(page_content=summaries)
+                output = self.reduce_chain.run([summaries])
         else:
             print('No any information in the database!!')
             output = ''
