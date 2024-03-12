@@ -252,7 +252,7 @@ critical discussion, rational argument, and systematic presentation.
             return '', [Document(page_content="")]
         else:
             if os.path.isdir(input_info):
-                print('Loading file from %s' % input_info)
+                print('Loading folder from %s' % input_info)
                 self.origin_text, self.documents = "", [Document(page_content="")]
                 # dir
                 # from langchain.document_loaders import DirectoryLoader
@@ -495,13 +495,13 @@ class ChatBot(LangChain):
 
     def summary(self, input_info=None):
         # Initialize
-        _module, input_val, output_key = None, self.documents, None
         if isinstance(input_info, str):
             self.update_documents(input_info)
+        _module, input_val, output_key = None, self.documents, None
 
         # Chain
         if self.chain is not None:
-            _module = self.chain
+            _module, input_val = self.chain, self.documents
             if 'refine' == self.chain_mode:
                 _module = self.chain
                 input_val = {"input_documents": self.documents}  # "\n\n".join(result["intermediate_steps"][:3])
