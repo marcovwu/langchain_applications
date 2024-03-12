@@ -140,7 +140,7 @@ class Runner:
             self.chatbot()
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     # Large Language Model
     parser.add_argument('--llmname', type=str, default='Gemini', help=LLMRunner.LLM_CHOICES)
@@ -163,3 +163,7 @@ if __name__ == "__main__":
     # main
     runner = Runner(args)
     runner.run(mode=args.run_mode)
+
+
+if __name__ == "__main__":
+    main()

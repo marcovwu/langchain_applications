@@ -24,6 +24,11 @@ setuptools.setup(
         "Issue Tracker": "https://github.com/marcovwu/langchain_applications/issues",
     },
     packages=setuptools.find_packages(),
+    entry_points={
+        'console_scripts': [
+            'langapp = langchain_applications.runner:main',
+        ],
+    },
     install_requires=install_requires,
     classifiers=[
         "Development Status :: 3 - Alpha",         # 開發狀態（Alpha、Beta、Production/Stable）
