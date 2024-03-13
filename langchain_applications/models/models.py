@@ -18,9 +18,10 @@ class LLMRunner(ChatBot):
 
 
 class Llama(ChatBot):
-    MAX_TOKENS = 1800
+    TOKEN_LIMIT = 2048
+    MAX_NEW_TOKENS = 512
     MAX_PROMPT_LENGTH = 200
-    CHUNK_SIZE = MAX_TOKENS - MAX_PROMPT_LENGTH
+    CHUNK_SIZE = TOKEN_LIMIT - MAX_NEW_TOKENS - MAX_PROMPT_LENGTH
     CHUNK_OVERLAP = 0
     SPLIT_DOCS = True
 
@@ -39,10 +40,10 @@ class Llama(ChatBot):
         import torch
         from transformers import pipeline
         from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
-        # TODO: max_new_tokens + input tokens must <= token limit
+        # max_new_tokens + input tokens must <= token limit
         self.llm = pipeline(
             "text-generation", model="/data1/marco.wu/models/Large_Language_Model/chinese-alpaca-2-7b",
-            torch_dtype=torch.bfloat16, device_map="auto", max_new_tokens=512)  # max_length=self.MAX_TOKENS
+            torch_dtype=torch.bfloat16, device_map="auto", max_new_tokens=self.MAX_NEW_TOKENS)
         self.model = HuggingFacePipeline(pipeline=self.llm)
 
         # Initialize
@@ -53,9 +54,10 @@ class Llama(ChatBot):
 
 
 class MiniCPM(ChatBot):
-    MAX_TOKENS = 1800
+    TOKEN_LIMIT = 2048
+    MAX_NEW_TOKENS = 512
     MAX_PROMPT_LENGTH = 200
-    CHUNK_SIZE = MAX_TOKENS - MAX_PROMPT_LENGTH
+    CHUNK_SIZE = TOKEN_LIMIT - MAX_NEW_TOKENS - MAX_PROMPT_LENGTH
     CHUNK_OVERLAP = 0
     SPLIT_DOCS = True
 
@@ -64,10 +66,10 @@ class MiniCPM(ChatBot):
         import torch
         from transformers import pipeline
         from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
-        # TODO: max_new_tokens + input tokens must <= token limit
+        # max_new_tokens + input tokens must <= token limit
         self.llm = pipeline(
             "text-generation", model="/data1/marco.wu/models/Large_Language_Model/openbmb-minicpm-2B-sft-fp32-llama",
-            torch_dtype=torch.bfloat16, device_map="auto", max_new_tokens=512)  # max_length=self.MAX_TOKENS
+            torch_dtype=torch.bfloat16, device_map="auto", max_new_tokens=self.MAX_NEW_TOKENS)
         self.model = HuggingFacePipeline(pipeline=self.llm)
 
         # Initialize
@@ -239,7 +241,10 @@ AI:""" % ChatBot.PROMPT_MEMORY
 
 class MeetingSummary(ChatBot):
     # Variables
-    CHUNK_SIZE = 1024
+    TOKEN_LIMIT = 1024
+    MAX_NEW_TOKENS = 512
+    MAX_PROMPT_LENGTH = 200
+    CHUNK_SIZE = TOKEN_LIMIT - MAX_NEW_TOKENS - MAX_PROMPT_LENGTH
     CHUNK_OVERLAP = 0
     SPLIT_DOCS = True
     CHATBOT_PROMPT = {"default": "", "conversation_summary": "", "retrievalqa_default": "", "retrievalqa": ""}
@@ -252,7 +257,7 @@ class MeetingSummary(ChatBot):
         from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
         self.llm = pipeline(
             "summarization", model="knkarthick/MEETING-SUMMARY-BART-LARGE-XSUM-SAMSUM-DIALOGSUM-AMI",
-            max_new_tokens=512)
+            max_new_tokens=self.MAX_NEW_TOKENS)
         self.model = HuggingFacePipeline(pipeline=self.llm)
 
         # Initialize
