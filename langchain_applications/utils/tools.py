@@ -24,7 +24,7 @@ from langchain_core.prompts import (
 
 class LangChain(ABC):
     # Variables
-    MAX_TOKENS = 8192
+    HISTORY_LENGTH = 8192
     CHUNK_SIZE = 2048
     CHUNK_OVERLAP = 0
     SPLIT_DOCS = False
@@ -41,6 +41,17 @@ class LangChain(ABC):
     PROMPT_SYSTEM_ROLE = f"You as {NAME}. Print out only exactly the words that {NAME} would speak out, do not " + \
         "add anything. Don't repeat. Answer short, only few words, as if in a talk. Craft your response " + \
         f"only from the first-person perspective of {NAME} and never as user."
+    PROMPT_MAP_MEETING = "You will receive a passage of a story, article, speech, interview, meeting, or similar " + \
+        "content. This section will be enclosed in triple backticks (```). Your goal is to provide a detailed " + \
+        "summary, including discussions on various topics during the meeting then highlight the insights and ideas " + \
+        "from different speakers, as well as any action items mentioned. Your response should consist of at least " + \
+        "three paragraphs, and fully encompass the content conveyed in the passage."
+    PROMPT_COMBINE_MEETING = "You will be given a series of summaries. The summaries will be enclosed in triple " + \
+        "backticks (```). Your goal is to vreate a comprehensive summary based on the provided dialogue excerpts. " + \
+        "Please Response the detail summary approximately 500 words long then highlight the various topics " + \
+        "discussed during the meeting and include the perspectives and discussion contents of the speakers. Ensure " + \
+        "to capture the important content of the conversation and action items so that readers can fully " + \
+        "understand the meeting's content."
     CHATBOT_PROMPT = {
         "default": f"{PROMPT_SYSTEM_ROLE} {PROMPT_SYSTEM}\nCurrent conversation:\n",
         "langchain_default": """You are a professional chatbot. Please answer the question directly!
@@ -104,6 +115,21 @@ Your response should be at least three paragraphs and fully encompass what was s
 ```{text}```
 FULL SUMMARY:
 """,
+        "rag_map_custom": """
+You will receive a passage of a story, article, speech, interview, meeting, or similar content.
+This section will be enclosed in triple backticks (```).
+Your goal is to provide a summary of this passage so that readers gain a comprehensive understanding of the main points,
+events, action items, or significance conveyed in the quoted material.
+Your response should consist of at least three paragraphs and fully encompass the content conveyed in the passage.
+
+```{text}```
+FULL SUMMARY:
+""",
+        "rag_map_meeting": """%s
+
+```{text}```
+FULL SUMMARY:
+""" % PROMPT_MAP_MEETING,
         "rag_combine": """
 You will be given a series of summaries from a book. The summaries will be enclosed in triple backticks (```)
 Your goal is to give a verbose summary of what happened in the story.
@@ -112,6 +138,23 @@ The reader should be able to grasp what happened in the book.
 ```{text}```
 VERBOSE SUMMARY:
 """,
+        "rag_combine_custom": """
+You will be given a series of summaries. The summaries will be enclosed in triple backticks (```).
+Your goal is to provide a detailed summary of the content, approximately 1000 words long.
+These summaries may from various forms of text such as stories, articles, speeches, interviews, meeting, etc.
+The aim is to help readers understand the main points, events, action items, or significance conveyed in the quotes.
+When writing the final summary, ensure that the content exhibits fluency, accuracy of information, coherence,
+emphasis on key points, and other characteristics.
+
+
+```{text}```
+VERBOSE SUMMARY:
+""",
+        "rag_combine_meeting": """%s
+
+```{text}```
+VERBOSE SUMMARY:
+""" % PROMPT_COMBINE_MEETING,
         "level1": """
 Please provide a summary of the following text.
 Please provide your output in a manner that a 5 year old would understand
@@ -341,7 +384,7 @@ critical discussion, rational argument, and systematic presentation.
         reduce_documents_chain = ReduceDocumentsChain(
             combine_documents_chain=combine_documents_chain,
             collapse_documents_chain=combine_documents_chain,  # If documents exceed context for `StuffDocumentsChain`
-            token_max=self.MAX_TOKENS,  # The maximum number of tokens to group documents into.
+            token_max=self.CHUNK_SIZE,  # The maximum number of tokens to group documents into.
         )
         self.chain = MapReduceDocumentsChain(
             llm_chain=map_chain, reduce_documents_chain=reduce_documents_chain,
@@ -361,11 +404,12 @@ critical discussion, rational argument, and systematic presentation.
         """
 
         # map
-        map_prompt_template = PromptTemplate(template=self.SUMMARY_PROMPT["rag_map"], input_variables=["text"])
+        map_prompt_template = PromptTemplate(template=self.SUMMARY_PROMPT["rag_map_custom"], input_variables=["text"])
         self.map_chain = load_summarize_chain(llm=self.model, chain_type=chain_type, prompt=map_prompt_template)
 
         # reduce
-        combine_prompt_template = PromptTemplate(template=self.SUMMARY_PROMPT["rag_combine"], input_variables=["text"])
+        combine_prompt_template = PromptTemplate(
+            template=self.SUMMARY_PROMPT["rag_map_custom"], input_variables=["text"])
         self.reduce_chain = load_summarize_chain(llm=self.model, chain_type=chain_type, prompt=combine_prompt_template)
 
         # overall
@@ -418,7 +462,12 @@ critical discussion, rational argument, and systematic presentation.
             summary_list = []
             for i, doc in enumerate(documents):
                 # Go get a summary of the chunk
+                # [debug] chunk_summary = self.model.invoke(
+                #     self.SUMMARY_PROMPT["rag_map_custom"].replace('{text}', doc.page_content))
+                # [debug] print(len(self.llm.tokenizer(doc.page_content)["input_ids"]))
+                # [debug] print(len(self.llm.tokenizer(self.map_chain.llm_chain.prompt.template)['input_ids']))
                 chunk_summary = self.map_chain.run([doc])
+
                 # Append that summary to your list
                 summary_list.append(chunk_summary)
                 print(
@@ -428,8 +477,10 @@ critical discussion, rational argument, and systematic presentation.
             output = summary_list[0] if summary_list else ''
             if len(summary_list) > 1:
                 summaries = "\n".join(summary_list)
-                summaries = Document(page_content=summaries)
-                output = self.reduce_chain.run([summaries])
+                summaries_doc = [Document(page_content=summaries)]
+                # if self.SPLIT_DOCS:
+                #     summaries_doc = self.text_splitter.split_documents(summaries_doc)
+                output = self.reduce_chain.run(summaries_doc)
         else:
             print('No any information in the database!!')
             output = ''
@@ -457,7 +508,7 @@ class ChatBot(LangChain):
             msg = self.chat_history.messages
         else:
             msg, words = self.obtain_default_prompt(), self.count_tokens(self.CHATBOT_PROMPT["default"])
-            while self.count_tokens(msg) > self.MAX_TOKENS - words:
+            while self.count_tokens(msg) > self.HISTORY_LENGTH - words:
                 self.chat_history.popleft()  # Human
                 self.chat_history.popleft()  # AI
                 msg = self.obtain_default_prompt()

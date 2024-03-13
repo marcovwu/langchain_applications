@@ -19,6 +19,9 @@ class LLMRunner(ChatBot):
 
 class Llama(ChatBot):
     MAX_TOKENS = 2048
+    MAX_PROMPT_LENGTH = 200
+    CHUNK_SIZE = MAX_TOKENS - MAX_PROMPT_LENGTH
+    CHUNK_OVERLAP = 0
     SPLIT_DOCS = True
 
     def __init__(self, **kwargs):
@@ -33,53 +36,44 @@ class Llama(ChatBot):
 
         # [Llama Chinese-Alpaca-2-7B]
         import torch
-        from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+        from transformers import pipeline
         from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
-        tokenizer = AutoTokenizer.from_pretrained(
-            "/data1/marco.wu/models/Large_Language_Model/chinese-alpaca-2-7b", device_map="auto")
-        model = AutoModelForCausalLM.from_pretrained(
-            "/data1/marco.wu/models/Large_Language_Model/chinese-alpaca-2-7b", device_map="auto")
-        self.llm_model = pipeline(
-            "text-generation", model=model, tokenizer=tokenizer, torch_dtype=torch.bfloat16, device_map="auto",
-            max_new_tokens=1024
-        )
-        self.model = HuggingFacePipeline(pipeline=self.llm_model)
+        # TODO: max_new_tokens + input tokens must <= token limit
+        self.llm = pipeline(
+            "text-generation", model="/data1/marco.wu/models/Large_Language_Model/chinese-alpaca-2-7b",
+            torch_dtype=torch.bfloat16, device_map="auto", max_length=self.MAX_TOKENS)  # max_new_tokens=512
+        self.model = HuggingFacePipeline(pipeline=self.llm)
 
         # Initialize
         super().__init__(self.model, **kwargs)
 
     def count_tokens(self, string):
-        return len(self.llm_model.tokenizer(string)["input_ids"])
+        return len(self.llm.tokenizer(string)["input_ids"])
 
 
 class MiniCPM(ChatBot):
-    MAX_TOKENS = 4096
-    CHUNK_SIZE = 4096
+    MAX_TOKENS = 2048
+    MAX_PROMPT_LENGTH = 200
+    CHUNK_SIZE = MAX_TOKENS - MAX_PROMPT_LENGTH
+    CHUNK_OVERLAP = 0
     SPLIT_DOCS = True
 
     def __init__(self, **kwargs):
         # [Llama Chinese-Alpaca-2-7B]
         import torch
-        from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+        from transformers import pipeline
         from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
-        tokenizer = AutoTokenizer.from_pretrained(
-            "/data1/marco.wu/models/Large_Language_Model/openbmb-minicpm-2B-sft-fp32-llama", device_map="auto")
-        model = AutoModelForCausalLM.from_pretrained(
-            "/data1/marco.wu/models/Large_Language_Model/openbmb-minicpm-2B-sft-fp32-llama", device_map="auto")
-        self.llm_model = pipeline(
-            "text-generation", model=model, tokenizer=tokenizer, torch_dtype=torch.bfloat16, device_map="auto",
-            max_new_tokens=1024
-        )
-        self.llm_model = pipeline(
+        # TODO: max_new_tokens + input tokens must <= token limit
+        self.llm = pipeline(
             "text-generation", model="/data1/marco.wu/models/Large_Language_Model/openbmb-minicpm-2B-sft-fp32-llama",
-            torch_dtype=torch.bfloat16, device_map="auto", max_new_tokens=2048)
-        self.model = HuggingFacePipeline(pipeline=self.llm_model)
+            torch_dtype=torch.bfloat16, device_map="auto", max_length=self.MAX_TOKENS)  # max_new_tokens=512
+        self.model = HuggingFacePipeline(pipeline=self.llm)
 
         # Initialize
         super().__init__(self.model, **kwargs)
 
     def count_tokens(self, string):
-        return len(self.llm_model.tokenizer(string)["input_ids"])
+        return len(self.llm.tokenizer(string)["input_ids"])
 
 
 class Gemma(ChatBot):
@@ -99,12 +93,13 @@ class Gemma(ChatBot):
         # import torch
         # from transformers import pipeline
         # from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
-        # self.llm_model = pipeline(
+        # self.llm = pipeline(
         #     "text-generation", model="google/gemma-7b-it", torch_dtype=torch.bfloat16, device_map="auto",
         #     max_new_tokens=8192)
-        # self.model = HuggingFacePipeline(pipeline=self.llm_model)
+        # self.model = HuggingFacePipeline(pipeline=self.llm)
 
         # [HuggingFace]
+        # from transformers import AutoTokenizer, AutoModelForCausalLM
         # self.tokenizer = AutoTokenizer.from_pretrained("google/gemma-7b-it", device_map="auto")
         # self.model = AutoModelForCausalLM.from_pretrained("google/gemma-7b-it", device_map="auto")
 
@@ -112,7 +107,7 @@ class Gemma(ChatBot):
         super().__init__(self.model, **kwargs)
 
     def count_tokens(self, string):
-        return len(self.llm_model.tokenizer(string)["input_ids"])
+        return len(self.llm.tokenizer(string)["input_ids"])
 
 
 class Zephyr(ChatBot):
@@ -196,10 +191,10 @@ AI:""" % ChatBot.PROMPT_MEMORY
         import torch
         from transformers import pipeline
         from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
-        self.llm_model = pipeline(
+        self.llm = pipeline(
             "text-generation", model="HuggingFaceH4/zephyr-7b-beta", torch_dtype=torch.bfloat16, device_map="auto",
             max_new_tokens=2048)
-        self.model = HuggingFacePipeline(pipeline=self.llm_model)
+        self.model = HuggingFacePipeline(pipeline=self.llm)
 
         # Initialize
         super().__init__(self.model, **kwargs)
@@ -216,7 +211,7 @@ AI:""" % ChatBot.PROMPT_MEMORY
         for k in list(ChatBot.SUMMARY_PROMPT.keys()):
             # pre-process
             # prompt_list = getattr(cls, prompt_name, None)
-            self.SUMMARY_PROMPT[k] = self.llm_model.tokenizer.apply_chat_template(
+            self.SUMMARY_PROMPT[k] = self.llm.tokenizer.apply_chat_template(
                 self.SUMMARY_PROMPT[k], tokenize=False, add_generation_prompt=True)
             # setattr(ChatBot, prompt_name, prompt)
 
@@ -224,12 +219,12 @@ AI:""" % ChatBot.PROMPT_MEMORY
         for k in list(ChatBot.CHATBOT_PROMPT.keys()):
             # pre-process
             # prompt_list = getattr(cls, prompt_name, None)
-            self.CHATBOT_PROMPT[k] = self.llm_model.tokenizer.apply_chat_template(
+            self.CHATBOT_PROMPT[k] = self.llm.tokenizer.apply_chat_template(
                 self.CHATBOT_PROMPT[k], tokenize=False, add_generation_prompt=True)
             # setattr(ChatBot, prompt_name, prompt)
 
     def count_tokens(self, string):
-        return len(self.llm_model.tokenizer(string)["input_ids"])
+        return len(self.llm.tokenizer(string)["input_ids"])
 
     def chat_preprocesss(self, text_with_prompt, text):
         text_with_prompt = f"<|user|>\n{text}</s>\n<|assistant|>\n"
@@ -242,7 +237,6 @@ AI:""" % ChatBot.PROMPT_MEMORY
 
 class MeetingSummary(ChatBot):
     # Variables
-    MAX_TOKENS = 512
     CHUNK_SIZE = 1024
     CHUNK_OVERLAP = 0
     SPLIT_DOCS = True
@@ -254,20 +248,20 @@ class MeetingSummary(ChatBot):
     def __init__(self, **kwargs):
         from transformers import pipeline
         from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
-        self.llm_model = pipeline(
+        self.llm = pipeline(
             "summarization", model="knkarthick/MEETING-SUMMARY-BART-LARGE-XSUM-SAMSUM-DIALOGSUM-AMI",
             max_new_tokens=512)
-        self.model = HuggingFacePipeline(pipeline=self.llm_model)
+        self.model = HuggingFacePipeline(pipeline=self.llm)
 
         # Initialize
         super().__init__(self.model, **kwargs)
 
     def count_tokens(self, string):
-        return len(self.llm_model.tokenizer(string)["input_ids"])
+        return len(self.llm.tokenizer(string)["input_ids"])
 
 
 class Gemini(ChatBot):
-    GOOGLE_API_KEY = "AIzaSyApdfSReJd0nL7Zf1fR_OaTIk9HkHQyHDg"  # Gmail User Name: marcowu1999
+    GOOGLE_API_KEY = "AIzaSyC3d_lzyoPTqGgxiifPUexS6Ro7GcqLgvc"  # Gmail User Name: marcowu1999
 
     def __init__(self, **kwargs):
         # [Langchain]
