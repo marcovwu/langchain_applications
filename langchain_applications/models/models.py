@@ -18,7 +18,7 @@ class LLMRunner(ChatBot):
 
 
 class Llama(ChatBot):
-    MAX_TOKENS = 2048
+    MAX_TOKENS = 1800
     MAX_PROMPT_LENGTH = 200
     CHUNK_SIZE = MAX_TOKENS - MAX_PROMPT_LENGTH
     CHUNK_OVERLAP = 0
@@ -30,8 +30,9 @@ class Llama(ChatBot):
         # from langchain.callbacks.manager import CallbackManager
         # from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
         # self.model = LlamaCpp(
-        #     model_path='models/llama-2-13b-chat.Q5_K_M.gguf', n_gpu_layers=-1, n_batch=512, n_ctx=16384, f16_kv=True,
-        #     max_tokens=8192, callback_manager=CallbackManager([StreamingStdOutCallbackHandler()]), verbose=True,
+        #     model_path="/data1/marco.wu/models/Large_Language_Model/llama-2-13b/llama-2-13b-chat.Q5_K_M.gguf",
+        #     n_gpu_layers=-1, n_batch=512, n_ctx=16384, f16_kv=True, max_tokens=8192,
+        #     callback_manager=CallbackManager([StreamingStdOutCallbackHandler()]), verbose=True,
         # )
 
         # [Llama Chinese-Alpaca-2-7B]
@@ -41,7 +42,7 @@ class Llama(ChatBot):
         # TODO: max_new_tokens + input tokens must <= token limit
         self.llm = pipeline(
             "text-generation", model="/data1/marco.wu/models/Large_Language_Model/chinese-alpaca-2-7b",
-            torch_dtype=torch.bfloat16, device_map="auto", max_length=self.MAX_TOKENS)  # max_new_tokens=512
+            torch_dtype=torch.bfloat16, device_map="auto", max_new_tokens=512)  # max_length=self.MAX_TOKENS
         self.model = HuggingFacePipeline(pipeline=self.llm)
 
         # Initialize
@@ -52,7 +53,7 @@ class Llama(ChatBot):
 
 
 class MiniCPM(ChatBot):
-    MAX_TOKENS = 2048
+    MAX_TOKENS = 1800
     MAX_PROMPT_LENGTH = 200
     CHUNK_SIZE = MAX_TOKENS - MAX_PROMPT_LENGTH
     CHUNK_OVERLAP = 0
@@ -66,7 +67,7 @@ class MiniCPM(ChatBot):
         # TODO: max_new_tokens + input tokens must <= token limit
         self.llm = pipeline(
             "text-generation", model="/data1/marco.wu/models/Large_Language_Model/openbmb-minicpm-2B-sft-fp32-llama",
-            torch_dtype=torch.bfloat16, device_map="auto", max_length=self.MAX_TOKENS)  # max_new_tokens=512
+            torch_dtype=torch.bfloat16, device_map="auto", max_new_tokens=512)  # max_length=self.MAX_TOKENS
         self.model = HuggingFacePipeline(pipeline=self.llm)
 
         # Initialize
@@ -85,8 +86,9 @@ class Gemma(ChatBot):
         from langchain.callbacks.manager import CallbackManager
         from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
         self.model = LlamaCpp(
-            model_path='models/gemma-7b.Q5_K_M.gguf', n_gpu_layers=-1, n_batch=512, n_ctx=16384, f16_kv=True,
-            max_tokens=8192, callback_manager=CallbackManager([StreamingStdOutCallbackHandler()]), verbose=True,
+            model_path="/data1/marco.wu/models/Large_Language_Model/gemma-7b/gemma-7b.Q5_K_M.gguf", n_gpu_layers=-1,
+            n_batch=512, n_ctx=16384, f16_kv=True, max_tokens=8192,
+            callback_manager=CallbackManager([StreamingStdOutCallbackHandler()]), verbose=True,
         )
 
         # [HuggingFace Pipeline]
