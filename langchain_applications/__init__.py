@@ -1,1 +1,1 @@
-name = "api"
+name = "langchain_applications"

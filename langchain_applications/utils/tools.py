@@ -1,14 +1,13 @@
 import os
 import numpy as np
 
-from abc import ABC
 from collections import deque
 from sklearn.cluster import KMeans
 
 from langchain.prompts import PromptTemplate
 from langchain.agents import initialize_agent, Tool
 from langchain.chains.combine_documents.stuff import StuffDocumentsChain
-from langchain.text_splitter import RecursiveCharacterTextSplitter, CharacterTextSplitter
+from langchain.text_splitter import RecursiveCharacterTextSplitter  # CharacterTextSplitter
 from langchain.memory import ChatMessageHistory, ConversationBufferMemory, ConversationSummaryMemory
 from langchain.chains import (
     LLMChain, RetrievalQA, load_summarize_chain, MapReduceDocumentsChain, ReduceDocumentsChain, AnalyzeDocumentChain
@@ -21,153 +20,16 @@ from langchain_core.prompts import (
     ChatPromptTemplate, MessagesPlaceholder, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 )
 
+from langchain_applications.utils.prompt import PromptManager
 
-class LangChain(ABC):
+
+class LangChain(PromptManager):
     # Variables
-    HISTORY_LENGTH = 8192
-    CHUNK_SIZE = 2048
+    TOKEN_LIMIT = 2048
+    MAX_NEW_TOKENS = 512
+    MAX_PROMPT_LENGTH = 200
     CHUNK_OVERLAP = 0
     SPLIT_DOCS = False
-
-    # Prompts
-    NAME = "Kneron"
-    PROMPT_SYSTEM = "You are a nice chatbot having a conversation with a human. Provide a direct answer of " + \
-        "the question. refer chat history provided and aswer according to it."
-    PROMPT_RAG_SYSTEM = "You are a nice chatbot having a conversation with a human. Provide a direct answer of " + \
-        "the question. refer chat history and documents informations provided and aswer according to them."
-    PROMPT_MEMORY = "The following is a friendly conversation between a human and an AI. The AI is talkative and " + \
-        "provides lots of specific details from its context. If the AI does not know the answer to a question, it " + \
-        "truthfully says it does not know."
-    PROMPT_SYSTEM_ROLE = f"You as {NAME}. Print out only exactly the words that {NAME} would speak out, do not " + \
-        "add anything. Don't repeat. Answer short, only few words, as if in a talk. Craft your response " + \
-        f"only from the first-person perspective of {NAME} and never as user."
-    PROMPT_MAP_MEETING = "You will receive a passage of a story, article, speech, interview, meeting, or similar " + \
-        "content. This section will be enclosed in triple backticks (```). Your goal is to provide a detailed " + \
-        "summary, including discussions on various topics during the meeting then highlight the insights and ideas " + \
-        "from different speakers, as well as any action items mentioned. Your response should consist of at least " + \
-        "three paragraphs, and fully encompass the content conveyed in the passage."
-    PROMPT_COMBINE_MEETING = "You will be given a series of summaries. The summaries will be enclosed in triple " + \
-        "backticks (```). Your goal is to vreate a comprehensive summary based on the provided dialogue excerpts. " + \
-        "Please Response the detail summary approximately 500 words long then highlight the various topics " + \
-        "discussed during the meeting and include the perspectives and discussion contents of the speakers. Ensure " + \
-        "to capture the important content of the conversation and action items so that readers can fully " + \
-        "understand the meeting's content."
-    CHATBOT_PROMPT = {
-        "default": f"{PROMPT_SYSTEM_ROLE} {PROMPT_SYSTEM}\nCurrent conversation:\n",
-        "langchain_default": """You are a professional chatbot. Please answer the question directly!
-
-Previous conversation:
-{chat_history}
-
-Current converation:
-{input}
-""",
-        "conversation_summary": """%s
-
-Current conversation:
-{chat_history}
-Human: {input}
-AI:""" % PROMPT_MEMORY,
-        "retrievalqa_default": """%s %s
-Documents Informations:
-{docs}
-
-Current conversation:
-""" % (PROMPT_SYSTEM_ROLE, PROMPT_RAG_SYSTEM),
-        "retrievalqa": """
-Use the following pieces of information to answer the user's question. If you don't know the answer,
-just say that you don't know, don't try to repeat or make up an answer.
-
-Partial Content: {docs}
-
-Only return the helpful answer below and nothing else.
-Helpful answer:
-"""
-    }
-    SUMMARY_PROMPT = {
-        "summary": """Write a concise summary of the following about 1000 words:
-"{text}"
-CONCISE SUMMARY:""",
-        "refine": (
-            "Your job is to produce a final summary\n"
-            "We have provided an existing summary up to a certain point: {existing_answer}\n"
-            "We have the opportunity to refine the existing summary"
-            "(only if needed) with some more context below.\n"
-            "------------\n"
-            "{text}\n"
-            "------------\n"
-            "Given the new context, refine the original summary in Italian"
-            "If the context isn't useful, return the original summary."
-        ),
-        "map": """The following is a set of documents:
-{docs}
-Based on this list of docs, please identify the main themes
-Helpful Answer:""",  # hub.pull("rlm/map-prompt")
-        "reduce": """The following is set of summaries:
-{docs}
-Take these and distill it into a final, consolidated summary of the main themes.
-Helpful Answer:""",
-        "rag_map": """
-You will be given a single passage of a book. This section will be enclosed in triple backticks (```)
-Your goal is to give a summary of this section so that a reader will have a full understanding of what happened.
-Your response should be at least three paragraphs and fully encompass what was said in the passage.
-
-```{text}```
-FULL SUMMARY:
-""",
-        "rag_map_custom": """
-You will receive a passage of a story, article, speech, interview, meeting, or similar content.
-This section will be enclosed in triple backticks (```).
-Your goal is to provide a summary of this passage so that readers gain a comprehensive understanding of the main points,
-events, action items, or significance conveyed in the quoted material.
-Your response should consist of at least three paragraphs and fully encompass the content conveyed in the passage.
-
-```{text}```
-FULL SUMMARY:
-""",
-        "rag_map_meeting": """%s
-
-```{text}```
-FULL SUMMARY:
-""" % PROMPT_MAP_MEETING,
-        "rag_combine": """
-You will be given a series of summaries from a book. The summaries will be enclosed in triple backticks (```)
-Your goal is to give a verbose summary of what happened in the story.
-The reader should be able to grasp what happened in the book.
-
-```{text}```
-VERBOSE SUMMARY:
-""",
-        "rag_combine_custom": """
-You will be given a series of summaries. The summaries will be enclosed in triple backticks (```).
-Your goal is to provide a detailed summary of the content, approximately 1000 words long.
-These summaries may from various forms of text such as stories, articles, speeches, interviews, meeting, etc.
-The aim is to help readers understand the main points, events, action items, or significance conveyed in the quotes.
-When writing the final summary, ensure that the content exhibits fluency, accuracy of information, coherence,
-emphasis on key points, and other characteristics.
-
-
-```{text}```
-VERBOSE SUMMARY:
-""",
-        "rag_combine_meeting": """%s
-
-```{text}```
-VERBOSE SUMMARY:
-""" % PROMPT_COMBINE_MEETING,
-        "level1": """
-Please provide a summary of the following text.
-Please provide your output in a manner that a 5 year old would understand
-
-TEXT:
-Philosophy (from Greek: φιλοσοφία, philosophia, 'love of wisdom') \
-is the systematized study of general and fundamental questions, \
-such as those about existence, reason, knowledge, values, mind, and language. \
-Some sources claim the term was coined by Pythagoras (c. 570 – c. 495 BCE), \
-although this theory is disputed by some. Philosophical methods include questioning, \
-critical discussion, rational argument, and systematic presentation.
-"""
-    }
 
     # Options
     SUPPORT_FORMATS = [".pdf", ".doc", ".txt", ".md"]
@@ -183,6 +45,7 @@ critical discussion, rational argument, and systematic presentation.
         """
 
         # init info
+        self.update_hyp()
         self.model = model
         self.chain_keys = {"input": "input", "output": "text", "memory": "chat_history"}
         self.memory_mode = memory_mode
@@ -190,8 +53,12 @@ critical discussion, rational argument, and systematic presentation.
         self.agent_mode = agent_mode
 
         # init input
-        self.text_splitter = CharacterTextSplitter.from_tiktoken_encoder(
-            chunk_size=self.CHUNK_SIZE, chunk_overlap=self.CHUNK_OVERLAP)
+        # self.text_splitter = CharacterTextSplitter.from_tiktoken_encoder(
+        #     chunk_size=self.chunk_size, chunk_overlap=self.chunk_overlap)
+        self.text_splitter = RecursiveCharacterTextSplitter(
+            separators=["\n\n", "\n", "\t"],
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap, length_function=self.count_tokens)
         self.update_documents(input_info)
 
         # init memory
@@ -222,10 +89,6 @@ critical discussion, rational argument, and systematic presentation.
         elif 'map_reduce' == self.chain_mode:
             self.init_map_reduce_chain()
         elif 'rag_map_reduce' in self.chain_mode:
-            self.text_splitter = RecursiveCharacterTextSplitter(
-                separators=["\n\n", "\n", "\t"],
-                chunk_size=self.CHUNK_SIZE,
-                chunk_overlap=self.CHUNK_OVERLAP)
             self.init_rag_map_reduce_chain(chain_type=self.chain_mode.split('-')[1])
         elif 'rag_retrieval' == self.chain_mode:
             self.init_rag_retrieval_chain(documents=self.documents)  # , chain_type=self.chain_mode.split('-')[1])
@@ -254,6 +117,17 @@ critical discussion, rational argument, and systematic presentation.
                     text = f.read()
                 docs = [Document(page_content=text)]
         return text, docs
+
+    def update_hyp(self):
+        self.token_limit = self.TOKEN_LIMIT
+        self.max_new_tokens = self.MAX_NEW_TOKENS
+        self.max_prompt_length = self.MAX_PROMPT_LENGTH
+        self.chunk_size = self.token_limit - self.max_new_tokens - self.max_prompt_length
+        self.chunk_overlap = self.CHUNK_OVERLAP
+        self.history_length = self.chunk_size
+
+    def count_tokens(self, string):
+        return self.model.get_num_tokens(string)
 
     def update_chain_keys(self, dict_info):
         for k, v in dict_info.items():
@@ -380,15 +254,15 @@ critical discussion, rational argument, and systematic presentation.
         map_chain = LLMChain(llm=self.model, prompt=self.SUMMARY_PROMPT["map"])
         reduce_prompt = PromptTemplate.from_template(self.SUMMARY_PROMPT["reduce"])
         reduce_chain = LLMChain(llm=self.model, prompt=reduce_prompt)
-        combine_documents_chain = StuffDocumentsChain(llm_chain=reduce_chain, document_variable_name="docs")
+        combine_documents_chain = StuffDocumentsChain(llm_chain=reduce_chain, document_variable_name="text")
         reduce_documents_chain = ReduceDocumentsChain(
             combine_documents_chain=combine_documents_chain,
             collapse_documents_chain=combine_documents_chain,  # If documents exceed context for `StuffDocumentsChain`
-            token_max=self.CHUNK_SIZE,  # The maximum number of tokens to group documents into.
+            token_max=self.token_limit,  # The maximum number of tokens to group documents into.
         )
         self.chain = MapReduceDocumentsChain(
             llm_chain=map_chain, reduce_documents_chain=reduce_documents_chain,
-            document_variable_name="docs",  # The variable name in the llm_chain to put the documents in
+            document_variable_name="text",  # The variable name in the llm_chain to put the documents in
             return_intermediate_steps=False,   # Return the results of the map steps in the output
         )
 
@@ -404,13 +278,19 @@ critical discussion, rational argument, and systematic presentation.
         """
 
         # map
-        map_prompt_template = PromptTemplate(template=self.SUMMARY_PROMPT["rag_map_custom"], input_variables=["text"])
+        map_prompt_template = PromptTemplate(template=self.SUMMARY_PROMPT["map_book"], input_variables=["text"])
         self.map_chain = load_summarize_chain(llm=self.model, chain_type=chain_type, prompt=map_prompt_template)
 
         # reduce
-        combine_prompt_template = PromptTemplate(
-            template=self.SUMMARY_PROMPT["rag_map_custom"], input_variables=["text"])
-        self.reduce_chain = load_summarize_chain(llm=self.model, chain_type=chain_type, prompt=combine_prompt_template)
+        combine_prompt_template = PromptTemplate(template=self.SUMMARY_PROMPT["combine_book"], input_variables=["text"])
+        # self.reduce_chain = load_summarize_chain(llm=self.model, chain_type=chain_type, prompt=combine_prompt_template
+        reduce_chain = LLMChain(llm=self.model, prompt=combine_prompt_template)
+        combine_documents_chain = StuffDocumentsChain(llm_chain=reduce_chain, document_variable_name="text")
+        self.reduce_chain = ReduceDocumentsChain(
+            combine_documents_chain=combine_documents_chain,
+            collapse_documents_chain=combine_documents_chain,  # If documents exceed context for `StuffDocumentsChain`
+            token_max=self.token_limit,  # The maximum number of tokens to group documents into.
+        )
 
         # overall
         self.chain = self.summary_map_reduce_chain_from_rag
@@ -426,7 +306,7 @@ critical discussion, rational argument, and systematic presentation.
         prompt = PromptTemplate.from_template(
             self.CHATBOT_PROMPT["retrievalqa" + "_" + self.memory_mode if self.memory_mode else ""])
         chain = LLMChain(llm=self.model, prompt=prompt, verbose=True)
-        combine_documents_chain = StuffDocumentsChain(llm_chain=chain, document_variable_name="docs")
+        combine_documents_chain = StuffDocumentsChain(llm_chain=chain, document_variable_name="text")
 
         # TODO: RetrievalQA
         self.update_chain_keys(dict_info={"input": "query", "output": "result"})
@@ -462,10 +342,12 @@ critical discussion, rational argument, and systematic presentation.
             summary_list = []
             for i, doc in enumerate(documents):
                 # Go get a summary of the chunk
-                # [debug] chunk_summary = self.model.invoke(
+                # chunk_summary = self.model.invoke(
                 #     self.SUMMARY_PROMPT["rag_map_custom"].replace('{text}', doc.page_content))
-                # [debug] print(len(self.llm.tokenizer(doc.page_content)["input_ids"]))
-                # [debug] print(len(self.llm.tokenizer(self.map_chain.llm_chain.prompt.template)['input_ids']))
+                # print(len(self.llm.tokenizer(doc.page_content)["input_ids"]))
+                # print(len(self.llm.tokenizer(self.map_chain.llm_chain.prompt.template)['input_ids']))
+                # print([self.count_tokens(doc.page_content) for doc in documents])
+                # print([len(self.llm.tokenizer(doc.page_content)["input_ids"]) for doc in documents])
                 chunk_summary = self.map_chain.run([doc])
 
                 # Append that summary to your list
@@ -474,13 +356,16 @@ critical discussion, rational argument, and systematic presentation.
                     f"Summary #{i} (chunk #{documents[i].page_content[:250]}) - Preview: {chunk_summary[:250]} ... \n")
 
             # Reduce Summaries
-            output = summary_list[0] if summary_list else ''
-            if len(summary_list) > 1:
-                summaries = "\n".join(summary_list)
-                summaries_doc = [Document(page_content=summaries)]
+            if len(summary_list):
+                summaries_doc = [Document(page_content="\n".join([sl.replace('\n', '') for sl in summary_list]))]
                 # if self.SPLIT_DOCS:
                 #     summaries_doc = self.text_splitter.split_documents(summaries_doc)
+                # print([self.count_tokens(doc.page_content) for doc in summaries_doc])
+                self.reduce_chain.token_max = sum([
+                    self.count_tokens(doc.page_content) for doc in summaries_doc]) + self.max_new_tokens
                 output = self.reduce_chain.run(summaries_doc)
+            else:
+                output = ''
         else:
             print('No any information in the database!!')
             output = ''
@@ -495,9 +380,6 @@ class ChatBot(LangChain):
     def chat_preprocesss(self, text_with_prompt, text):
         return text_with_prompt, text
 
-    def count_tokens(self, string):
-        return len(string.split(" "))
-
     def obtain_default_prompt(self):
         return self.CHATBOT_PROMPT["default"] + "".join(self.chat_history)
 
@@ -508,7 +390,7 @@ class ChatBot(LangChain):
             msg = self.chat_history.messages
         else:
             msg, words = self.obtain_default_prompt(), self.count_tokens(self.CHATBOT_PROMPT["default"])
-            while self.count_tokens(msg) > self.HISTORY_LENGTH - words:
+            while self.count_tokens(msg) > self.history_length - words:
                 self.chat_history.popleft()  # Human
                 self.chat_history.popleft()  # AI
                 msg = self.obtain_default_prompt()
