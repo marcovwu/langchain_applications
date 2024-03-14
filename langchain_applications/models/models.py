@@ -1,5 +1,7 @@
 import os
 
+from loguru import logger
+
 from langchain_applications.utils.tools import ChatBot  # noqa: E402
 
 
@@ -12,7 +14,7 @@ class LLMRunner(ChatBot):
         if llm_class:
             llm_runner = llm_class(**kwargs)
         else:
-            print('Unknown llm: %s' % llmname)
+            logger.info('Unknown llm: %s' % llmname)
             llm_runner = None
         return llm_runner
 

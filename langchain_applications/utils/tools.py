@@ -1,8 +1,17 @@
 import os
 import numpy as np
 
+# from io import StringIO
+from loguru import logger
 from collections import deque
+# from pypdf import PdfReader
+# from PyPDF2 import PdfReader
 from sklearn.cluster import KMeans
+# from pdfminer.pdfpage import PDFPage
+# from pdfminer.layout import LAParams
+from pdfminer.high_level import extract_text
+# from pdfminer.converter import TextConverter
+# from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
 
 from langchain.prompts import PromptTemplate
 from langchain.agents import initialize_agent, Tool
@@ -15,7 +24,7 @@ from langchain.chains import (
 from langchain_core.documents import Document
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS  # , Chroma
-from langchain_community.document_loaders import PyPDFLoader, UnstructuredWordDocumentLoader  # Docx2txtLoader
+from langchain_community.document_loaders import UnstructuredWordDocumentLoader  # PyPDFLoader, Docx2txtLoader
 from langchain_core.prompts import (
     ChatPromptTemplate, MessagesPlaceholder, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 )
@@ -98,15 +107,64 @@ class LangChain(PromptManager):
         if 'wiki' == self.agent_mode:
             self.init_wiki_agent()
 
-    @staticmethod
-    def load_file(file):
-        text, docs = "no input ...", [Document(page_content="")]
+    # @staticmethod
+    # def convert_pdf_to_txt(path):
+    #     rsrcmgr = PDFResourceManager()
+    #     retstr = StringIO()
+    #     codec = 'utf-8'
+    #     laparams = LAParams()
+    #     device = TextConverter(rsrcmgr, retstr, codec=codec, laparams=laparams)
+    #     fp = open(path, 'rb')
+    #     interpreter = PDFPageInterpreter(rsrcmgr, device)
+    #     password = ""
+    #     maxpages = 0
+    #     caching = True
+    #     pagenos = set()
+
+    #     for page in PDFPage.get_pages(
+    #         fp, pagenos, maxpages=maxpages, password=password, caching=caching, check_extractable=True
+    #     ):
+    #         interpreter.process_page(page)
+
+    #     text = retstr.getvalue()
+
+    #     fp.close()
+    #     device.close()
+    #     retstr.close()
+    #     return text
+
+    def load_file(self, file):
+        text, docs = " ", [Document(page_content="")]
         if isinstance(file, str) and os.path.exists(file):
             if '.pdf' in file:
-                loader = PyPDFLoader(file)
-                docs = loader.load_and_split()
-                for doc in docs:
-                    text += " " + doc.page_content
+                # PyPDFLoader
+                # loader = PyPDFLoader(file)
+                # docs = loader.load_and_split()
+                # for doc in docs:
+                #     text += " " + doc.page_content
+
+                # pypdf
+                # with open(file, 'rb') as file:
+                #     reader = PdfReader(file)
+                #     num_pages = len(reader.pages)
+                #     logger.info("Total pages:", num_pages)
+                #     # read
+                #     if num_pages >= 1:
+                #         docs = []
+                #         for page_num in range(num_pages):
+                #             t = reader.pages[page_num].extract_text()
+                #             if '\nj#\x00' in t:  # TODO: ignore /UniCNS-UTF16-H
+                #                 t = t[:t.index('\nj#\x00')]
+                #             if '\nÿ\x08\x005\x98\x01NK' in t:  # TODO: ignore /UniCNS-UTF16-H
+                #                 t = t[:t.index('\nÿ\x08\x005\x98\x01NK')]
+                #             docs.append(Document(page_content=t))
+                #             text += "\n\n" + docs[-1].page_content
+
+                # pdfminer
+                with open(file, 'rb') as f:
+                    text = extract_text(f)
+                docs = [Document(page_content=text)]
+                # text = LangChain.convert_pdf_to_txt(file)
             elif '.doc' in file:
                 loader = UnstructuredWordDocumentLoader(file)  # Docx2txtLoader(file)
                 docs = loader.load_and_split()
@@ -165,11 +223,11 @@ class LangChain(PromptManager):
     def update_documents(self, input_info):
         # load
         if not isinstance(input_info, str):
-            print(f'No update any document. unsupport format for {input_info}')
+            logger.warning(f'No update any document. unsupport format for {input_info}')
             return '', [Document(page_content="")]
         else:
             if os.path.isdir(input_info):
-                print('Loading folder from %s' % input_info)
+                logger.info('Loading folder from %s' % input_info)
                 self.origin_text, self.documents = "", [Document(page_content="")]
                 # dir
                 # from langchain.document_loaders import DirectoryLoader
@@ -179,25 +237,27 @@ class LangChain(PromptManager):
                 #     self.origin_text += " " + doc.page_content
                 # file
                 for filename in os.listdir(input_info):
-                    origin_text, documents = LangChain.load_file(os.path.join(input_info, filename))
+                    origin_text, documents = self.load_file(os.path.join(input_info, filename))
                     if origin_text != "no input ...":
-                        print(os.path.join(input_info, filename))
+                        logger.info(os.path.join(input_info, filename))
                         self.origin_text += "\n\n\n" + origin_text
                         self.documents += documents
             elif os.path.isfile(input_info):
-                print('Loading file from %s' % input_info)
-                self.origin_text, self.documents = LangChain.load_file(input_info)
+                logger.info('Loading file from %s' % input_info)
+                self.origin_text, self.documents = self.load_file(input_info)
             else:
-                print('No input file update to document')
+                logger.warning('No input file update to document')
                 self.origin_text, self.documents = "no input ...", [Document(page_content="")]
 
             # split
             if (
-                self.SPLIT_DOCS
-                or 'refine' == self.chain_mode
-                or 'rag_map_reduce' in self.chain_mode
-                or 'map_reduce' == self.chain_mode
+                self.SPLIT_DOCS and (
+                    'refine' == self.chain_mode
+                    or 'rag_map_reduce' in self.chain_mode
+                    or 'map_reduce' == self.chain_mode
+                )
             ):
+                logger.info('Starting to split the input documents ...')
                 self.documents = self.text_splitter.split_documents(self.documents)
 
             # rag
@@ -342,32 +402,42 @@ class LangChain(PromptManager):
             summary_list = []
             for i, doc in enumerate(documents):
                 # Go get a summary of the chunk
+                """ TODO: for debug
                 # chunk_summary = self.model.invoke(
                 #     self.SUMMARY_PROMPT["rag_map_custom"].replace('{text}', doc.page_content))
                 # print(len(self.llm.tokenizer(doc.page_content)["input_ids"]))
                 # print(len(self.llm.tokenizer(self.map_chain.llm_chain.prompt.template)['input_ids']))
                 # print([self.count_tokens(doc.page_content) for doc in documents])
                 # print([len(self.llm.tokenizer(doc.page_content)["input_ids"]) for doc in documents])
+                """
                 chunk_summary = self.map_chain.run([doc])
 
                 # Append that summary to your list
                 summary_list.append(chunk_summary)
-                print(
+                logger.info(
                     f"Summary #{i} (chunk #{documents[i].page_content[:250]}) - Preview: {chunk_summary[:250]} ... \n")
 
             # Reduce Summaries
             if len(summary_list):
+                # pre-process
                 summaries_doc = [Document(page_content="\n".join([sl.replace('\n', '') for sl in summary_list]))]
-                # if self.SPLIT_DOCS:
-                #     summaries_doc = self.text_splitter.split_documents(summaries_doc)
-                # print([self.count_tokens(doc.page_content) for doc in summaries_doc])
-                self.reduce_chain.token_max = sum([
-                    self.count_tokens(doc.page_content) for doc in summaries_doc]) + self.max_new_tokens
+
+                # update token max
+                if self.SPLIT_DOCS:
+                    summaries_doc_fortoken = self.text_splitter.split_documents(summaries_doc)
+                else:
+                    summaries_doc_fortoken = summaries_doc
+                summaries_tokens = [self.count_tokens(doc.page_content) for doc in summaries_doc_fortoken]
+                self.reduce_chain.token_max = sum(summaries_tokens) + self.max_new_tokens
+                logger.info('Updated the summaries token %d: %s to %d' % (
+                    sum(summaries_tokens), str(summaries_tokens), self.reduce_chain.token_max))
+
+                # reduce
                 output = self.reduce_chain.run(summaries_doc)
             else:
                 output = ''
         else:
-            print('No any information in the database!!')
+            logger.warning('No any information in the database!!')
             output = ''
 
         return output
@@ -451,7 +521,7 @@ class ChatBot(LangChain):
                 Then do a separate search and tell me what the commonalities are with Serena Williams"
 
         # Run
-        print('Obtaining summary ...')
+        logger.info('Obtaining summary ...')
         return self._inference(_module, input_val, output_key, self.origin_text, self.origin_text)
 
     def chat(self, text_with_prompt, text, use_history=False):

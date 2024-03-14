@@ -2,6 +2,7 @@ import os
 import argparse
 
 from tqdm import tqdm
+from loguru import logger
 from langchain_applications.models.models import LLMRunner
 
 
@@ -61,14 +62,14 @@ class Runner:
                 text = input("USER > ")
                 if text != 'exit':
                     result = self.llm_runner.chat(text, text, use_history=True)
-                    print(result.replace(text, ''))
+                    logger.info(result.replace(text, ''))
 
     def summary(self, new_file_path=None, save_file_name=''):
         if self.llm_runner is not None:
             # summary
             summary = self.llm_runner.summary(new_file_path)
             Runner.save_file(summary, save_file_name=save_file_name, write='w')
-            print(summary)
+            logger.info(summary)
 
     def check_name(self):
         if os.path.exists(self.input_info):
@@ -88,7 +89,7 @@ class Runner:
                     if self.input_key in data:
                         if self.restart or self.output_key not in data:
                             # pre-processing
-                            print(data[self.input_key])
+                            logger.info(data[self.input_key])
                             text = prompt.replace('{question}', data[self.input_key])
 
                             # inference
@@ -111,20 +112,20 @@ class Runner:
                                 # final
                                 data[self.output_key] = result_json
                                 json_data[i] = str(data).replace("'", '"') + '\n'
-                                print(data[self.output_key])
+                                logger.info(data[self.output_key])
 
                                 # Write
                                 with open(self.output_json_file, 'w') as f:
                                     f.write(''.join(json_data))
 
                             except Exception as e:
-                                print(e)  # import pdb; pdb.set_trace()
-                                print('Unexcept output format %s' % result)
+                                logger.error(e)  # import pdb; pdb.set_trace()
+                                logger.error('Unexcept output format %s' % result)
                         # else:
-                        #     print('already infered %s' % d)
+                        #     logger.info('already infered %s' % d)
                 except Exception as e:
-                    print(e)
-                    print('Unexcept input format %s' % d)
+                    logger.error(e)
+                    logger.error('Unexcept input format %s' % d)
 
     def run(self, mode=''):
         # Name

@@ -15,6 +15,7 @@ langchain-google-genai  # pip install --upgrade --quiet  langchain-google-genai 
 # langchain-community  # pip install -U langchain-community  # Langchain > WikipediaAPIWrapper`
 # wikipedia  # pip install wikipedia  # Wiki
 # pypdf  # pip install pypdf  # PDF
+# pdfminer.six  # pip install pdfminer.six  # PDF with chinese
 
 # Use to load Microsoft Documents
 # """
