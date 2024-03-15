@@ -24,7 +24,7 @@ from langchain.chains import (
 from langchain_core.documents import Document
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS  # , Chroma
-from langchain_community.document_loaders import UnstructuredWordDocumentLoader  # PyPDFLoader, Docx2txtLoader
+from langchain_community.document_loaders import UnstructuredWordDocumentLoader, PyPDFLoader  # Docx2txtLoader
 from langchain_core.prompts import (
     ChatPromptTemplate, MessagesPlaceholder, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 )
@@ -47,7 +47,7 @@ class LangChain(PromptManager):
     MEMORY_MODE_CHOICES = "'default', 'langchain_default', 'conversation_summary', 'conversation_buffer', "
     # TODO: map reduce with refine
     CHAIN_MODE_CHOICES = "'summary-stuff', 'summary-refine', 'summary-map_reduce', 'analyze-stuff', " + \
-        "'analyze-refine', 'analyze-map_recue, 'map_reduce' 'rag_map_reduce-stuff, 'rag_retrieval'"
+        "'analyze-refine', 'analyze-map_recue, 'map_reduce' 'custom_map_reduce-stuff, 'rag_retrieval'"
     AGENT_MODE_CHOICE = "'wiki'"
 
     def __init__(self, model, input_info='', memory_mode='', chain_mode='', agent_mode=''):
@@ -92,16 +92,12 @@ class LangChain(PromptManager):
         self.chain = None
         if 'summary' in self.chain_mode:
             self.init_summary_chain(chain_type=self.chain_mode.split('-')[1])
-        elif 'stuff' == self.chain_mode:
-            self.init_stuff_chain()
-        elif 'refine' == self.chain_mode:
-            self.init_refine_chain()
         elif 'analyze' in self.chain_mode:
             self.init_analyze_chain(chain_type=self.chain_mode.split('-')[1])
         elif 'map_reduce' == self.chain_mode:
             self.init_map_reduce_chain()
-        elif 'rag_map_reduce' in self.chain_mode:
-            self.init_rag_map_reduce_chain(chain_type=self.chain_mode.split('-')[1])
+        elif 'custom_map_reduce' in self.chain_mode:
+            self.init_custom_map_reduce_chain(chain_type=self.chain_mode.split('-')[1])
         elif 'rag_retrieval' == self.chain_mode:
             self.init_rag_retrieval_chain(documents=self.documents)  # , chain_type=self.chain_mode.split('-')[1])
 
@@ -136,15 +132,57 @@ class LangChain(PromptManager):
     #     retstr.close()
     #     return text
 
+    @staticmethod
+    def retrive_documents(documents, top_k):
+        """
+        TODO: deadlock error
+        Retrive documents from embedding clustering
+        """
+        embeddings = HuggingFaceEmbeddings()  # model_name="thenlper/gte-large"
+        vectors = embeddings.embed_documents([x.page_content for x in documents])
+        # documents = self.text_splitter.split_documents(documents)
+        # vectorstore = FAISS.from_documents(documents, embeddings)
+        # retriever = vectorstore.as_retriever()  # search_type="mmr", search_kwargs={"k": 2, "score_threshold": 0.5}
+
+        # Perform K-means clustering
+        if vectors:
+            num_clusters = min(top_k, len(vectors))
+            kmeans = KMeans(n_clusters=num_clusters, random_state=42).fit(vectors)
+
+            # Perform t-SNE and reduce to 2 dimensions
+            # tsne = TSNE(n_components=2, random_state=42)
+            # reduced_data_tsne = tsne.fit_transform(vectors)
+
+            # Find the closest embeddings to the centroids
+            closest_indices = []
+            for i in range(num_clusters):
+                # Get the list of distances from that particular cluster center
+                distances = np.linalg.norm(vectors - kmeans.cluster_centers_[i], axis=1)
+                # Find the list position of the closest one (using argmin to find the smallest distance)
+                closest_index = np.argmin(distances)
+                # Append that position to your closest indices list
+                closest_indices.append(closest_index)
+            selected_indices = sorted(closest_indices)
+            documents = [documents[doc] for doc in selected_indices]  # selected documents
+        return documents
+
     def load_file(self, file):
         text, docs = " ", [Document(page_content="")]
         if isinstance(file, str) and os.path.exists(file):
             if '.pdf' in file:
                 # PyPDFLoader
-                # loader = PyPDFLoader(file)
-                # docs = loader.load_and_split()
-                # for doc in docs:
-                #     text += " " + doc.page_content
+                loader = PyPDFLoader(file)
+                docs = loader.load_and_split()
+                for doc in docs:
+                    text += " " + doc.page_content
+
+                if "\nj#\x00" in text:
+                    # pdfminer
+                    logger.warning("Unsupport format 'j#\x00' in documents")
+                    with open(file, 'rb') as f:
+                        text = extract_text(f)
+                    # text = LangChain.convert_pdf_to_txt(file)
+                    docs = [Document(page_content=text)]
 
                 # pypdf
                 # with open(file, 'rb') as file:
@@ -162,12 +200,6 @@ class LangChain(PromptManager):
                 #                 t = t[:t.index('\nÿ\x08\x005\x98\x01NK')]
                 #             docs.append(Document(page_content=t))
                 #             text += "\n\n" + docs[-1].page_content
-
-                # pdfminer
-                with open(file, 'rb') as f:
-                    text = extract_text(f)
-                docs = [Document(page_content=text)]
-                # text = LangChain.convert_pdf_to_txt(file)
             elif '.doc' in file:
                 loader = UnstructuredWordDocumentLoader(file)  # Docx2txtLoader(file)
                 docs = loader.load_and_split()
@@ -194,34 +226,6 @@ class LangChain(PromptManager):
         for k, v in dict_info.items():
             if k in self.chain_keys and isinstance(self.chain_keys[k], str) and self.chain_keys[k]:
                 self.chain_keys[k] = v
-
-    def update_embeding_documents(self, documents, top_k=11):
-        embeddings = HuggingFaceEmbeddings()  # model_name="thenlper/gte-large"
-        vectors = embeddings.embed_documents([x.page_content for x in documents])
-        # documents = self.text_splitter.split_documents(documents)
-        # vectorstore = FAISS.from_documents(documents, embeddings)
-        # retriever = vectorstore.as_retriever()  # search_type="mmr", search_kwargs={"k": 2, "score_threshold": 0.5}
-
-        # Perform K-means clustering
-        if vectors:
-            num_clusters = min(top_k, len(vectors))
-            kmeans = KMeans(n_clusters=num_clusters, random_state=42).fit(vectors)
-
-            # Perform t-SNE and reduce to 2 dimensions
-            # tsne = TSNE(n_components=2, random_state=42)
-            # reduced_data_tsne = tsne.fit_transform(vectors)
-
-            # Find the closest embeddings to the centroids
-            closest_indices = []
-            for i in range(num_clusters):
-                # Get the list of distances from that particular cluster center
-                distances = np.linalg.norm(vectors - kmeans.cluster_centers_[i], axis=1)
-                # Find the list position of the closest one (using argmin to find the smallest distance)
-                closest_index = np.argmin(distances)
-                # Append that position to your closest indices list
-                closest_indices.append(closest_index)
-            selected_indices = sorted(closest_indices)
-            self.documents = [documents[doc] for doc in selected_indices]  # selected documents
 
     def update_documents(self, input_info):
         # load
@@ -257,10 +261,6 @@ class LangChain(PromptManager):
                 logger.info('Starting to split the input documents ...')
                 self.documents = self.text_splitter.split_documents(self.documents)
 
-            # rag
-            if 'rag_map_reduce' in self.chain_mode:
-                self.update_embeding_documents(self.documents)
-
             return self.origin_text, self.documents
 
     def init_langchain_default_memory(self):
@@ -284,23 +284,40 @@ class LangChain(PromptManager):
         self.chat_history = ConversationBufferMemory(memory_key=self.chain_keys["memory"], return_messages=True)
         return prompt
 
-    def init_summary_chain(self, chain_type='stuff'):
-        # summary api
+    def init_summary_chain(self, chain_type='stuff', prompt=None, refine_prompt=None):
         if chain_type == "stuff":
-            prompt = PromptTemplate(template=self.SUMMARY_PROMPT["stuff"], input_variables=["text"])
-            self.chain = load_summarize_chain(self.model, chain_type=chain_type, prompt=prompt)
+            # Prompt
+            if prompt is None:
+                prompt = PromptTemplate(template=self.SUMMARY_PROMPT["stuff"], input_variables=["text"])
+
+            # (1): load summary api with 'stuff' > out of memory
+            # self.chain = load_summarize_chain(self.model, chain_type=chain_type, prompt=prompt)
+            # (2): stuff chain api > out of memory
+            self.chain = StuffDocumentsChain(
+                llm_chain=LLMChain(llm=self.model, prompt=prompt), document_variable_name="text")
+            # (3): reduce chain > recursive(if doc larger than token_max, then split them)
+            self.chain = ReduceDocumentsChain(
+                combine_documents_chain=self.chain, collapse_documents_chain=self.chain, token_max=self.token_limit)
+
         elif chain_type == "refine":
+            # Prompt
+            if prompt is None:
+                prompt = PromptTemplate(template=self.SUMMARY_PROMPT["summary"], input_variables=["text"])
+            if refine_prompt is None:
+                refine_prompt = PromptTemplate(
+                    template=self.SUMMARY_PROMPT["refine"], input_variables=["existing_answer", "text"])
+
+            # Refine Chain
             self.update_chain_keys(dict_info={"output": "output_text"})
-            prompt = PromptTemplate(template=self.SUMMARY_PROMPT["summary"], input_variables=["text"])
-            refine_prompt = PromptTemplate(
-                template=self.SUMMARY_PROMPT["refine"], input_variables=["existing_answer", "text"])
             self.chain = load_summarize_chain(
                 self.model, chain_type=chain_type, question_prompt=prompt, refine_prompt=refine_prompt,
                 return_intermediate_steps=True,
                 # input_key=self.chain_keys["input"], output_key=self.chain_keys["output"],
             )
+
         else:
-            self.chain = load_summarize_chain(self.model, chain_type=chain_type)  # "stuff", "refine"
+            self.chain = load_summarize_chain(self.model, chain_type=chain_type)  # "map_reduce", ""
+        return self.chain
 
     def init_analyze_chain(self, chain_type):
         """
@@ -311,28 +328,26 @@ and then splits it up into chunks and then passes those chucks to the CombineDoc
 
 Create a new model by parsing and validating input data from keyword arguments.
         """
-        chain = load_summarize_chain(llm=self.model, chain_type=chain_type)
-        self.chain = AnalyzeDocumentChain(combine_docs_chain=chain, text_splitter=self.text_splitter)
+        self.chain = AnalyzeDocumentChain(
+            combine_docs_chain=self.init_summary_chain(chain_type=chain_type), text_splitter=self.text_splitter)
 
     def init_map_reduce_chain(self):
-        # map-reduce api
+        # Map
         map_prompt = PromptTemplate(template=self.SUMMARY_PROMPT["map"], input_variables=["text"])
         map_chain = LLMChain(llm=self.model, prompt=map_prompt)
+
+        # Reduce
         reduce_prompt = PromptTemplate(template=self.SUMMARY_PROMPT["reduce"], input_variables=["text"])
-        reduce_chain = LLMChain(llm=self.model, prompt=reduce_prompt)
-        combine_documents_chain = StuffDocumentsChain(llm_chain=reduce_chain, document_variable_name="text")
-        reduce_documents_chain = ReduceDocumentsChain(
-            combine_documents_chain=combine_documents_chain,
-            collapse_documents_chain=combine_documents_chain,  # If documents exceed context for `StuffDocumentsChain`
-            token_max=self.token_limit,  # The maximum number of tokens to group documents into.
-        )
+        reduce_documents_chain = self.init_summary_chain(chain_type='stuff', prompt=reduce_prompt)
+
+        # Map Reduce
         self.chain = MapReduceDocumentsChain(
             llm_chain=map_chain, reduce_documents_chain=reduce_documents_chain,
             document_variable_name="text",  # The variable name in the llm_chain to put the documents in
             return_intermediate_steps=False,   # Return the results of the map steps in the output
         )
 
-    def init_rag_map_reduce_chain(self, chain_type):
+    def init_custom_map_reduce_chain(self, chain_type):
         """
         Level 4: Best Representation Vectors - Summarize an entire book
 
@@ -350,17 +365,11 @@ Create a new model by parsing and validating input data from keyword arguments.
         # reduce
         combine_prompt_template = PromptTemplate(
             template=self.SUMMARY_PROMPT["combine_paper"], input_variables=["text"])
+        self.reduce_chain = self.init_summary_chain(chain_type='stuff', prompt=combine_prompt_template)
         # self.reduce_chain = load_summarize_chain(llm=self.model, chain_type=chain_type, prompt=combine_prompt_template
-        reduce_chain = LLMChain(llm=self.model, prompt=combine_prompt_template)
-        combine_documents_chain = StuffDocumentsChain(llm_chain=reduce_chain, document_variable_name="text")
-        self.reduce_chain = ReduceDocumentsChain(
-            combine_documents_chain=combine_documents_chain,
-            collapse_documents_chain=combine_documents_chain,  # If documents exceed context for `StuffDocumentsChain`
-            token_max=self.token_limit,  # The maximum number of tokens to group documents into.
-        )
 
         # overall
-        self.chain = self.summary_map_reduce_chain_from_rag
+        self.chain = self.summary_map_reduce_chain
 
     def init_rag_retrieval_chain(self, documents):  # TODO: , chain_type='map_reduce'):
         # embedding
@@ -404,7 +413,7 @@ Create a new model by parsing and validating input data from keyword arguments.
         ]
         self.agent = initialize_agent(tools, self.model, agent='zero-shot-react-description', verbose=True)
 
-    def summary_map_reduce_chain_from_rag(self, documents):
+    def summary_map_reduce_chain(self, documents):
         if documents:
             # Map Summaries
             summary_list = []
@@ -519,11 +528,13 @@ class ChatBot(LangChain):
                 input_val = self.origin_text
             elif 'refine' in self.chain_mode:
                 input_val = {"input_documents": self.documents}  # "\n\n".join(result["intermediate_steps"][:3])
+            elif 'custom_map_reduce' in self.chain_mode and 'rag' in self.chain_mode:
+                input_val = self.retrive_documents(self.documents, top_k=11)
 
-            # module & output key
+            # input_val & module & output key
             if 'refine' in self.chain_mode and 'analyze' not in self.chain_mode:
                 output_key = self.chain_keys["output"]
-            elif 'rag_map_reduce' not in self.chain_mode:
+            elif 'custom_map_reduce' not in self.chain_mode:
                 _module = self.chain.run
 
         # Agent
