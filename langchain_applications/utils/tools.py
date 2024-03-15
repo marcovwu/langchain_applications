@@ -43,10 +43,10 @@ class LangChain(PromptManager):
 
     # Options
     SUPPORT_FORMATS = [".pdf", ".doc", ".txt", ".md"]
-    MEMORY_MODE_CHOICES = "'default', 'langchain_default', 'conversation_summary', 'conversation_buffer'"
-    CHAIN_MODE_CHOICES = "'summary-stuff', 'summary-refine', 'summary-map_reduce', 'stuff', 'refine', " + \
-        "'analyze-stuff', 'analyze-refine', 'map_reduce' 'rag_map_reduce-stuff, rag_map_reduce-refine', " + \
-        "'rag_retrieval'"
+    MEMORY_MODE_CHOICES = "'default', 'langchain_default', 'conversation_summary', 'conversation_buffer', "
+    # TODO: map reduce with refine
+    CHAIN_MODE_CHOICES = "'summary-stuff', 'summary-refine', 'summary-map_reduce', 'analyze-stuff', " + \
+        "'analyze-refine', 'analyze-map_recue, 'map_reduce' 'rag_map_reduce-stuff, 'rag_retrieval'"
     AGENT_MODE_CHOICE = "'wiki'"
 
     def __init__(self, model, input_info='', memory_mode='', chain_mode='', agent_mode=''):
@@ -286,31 +286,20 @@ class LangChain(PromptManager):
     def init_summary_chain(self, chain_type='stuff'):
         # summary api
         if chain_type == "stuff":
-            prompt = PromptTemplate.from_template(self.SUMMARY_PROMPT["stuff"])
+            prompt = PromptTemplate(template=self.SUMMARY_PROMPT["stuff"], input_variables=["text"])
             self.chain = load_summarize_chain(self.model, chain_type=chain_type, prompt=prompt)
         elif chain_type == "refine":
-            prompt = PromptTemplate.from_template(self.SUMMARY_PROMPT["summary"])
-            refine_prompt = PromptTemplate.from_template(self.SUMMARY_PROMPT["refine"])
+            self.update_chain_keys(dict_info={"output": "output_text"})
+            prompt = PromptTemplate(template=self.SUMMARY_PROMPT["summary"], input_variables=["text"])
+            refine_prompt = PromptTemplate(
+                template=self.SUMMARY_PROMPT["refine"], input_variables=["existing_answer", "text"])
             self.chain = load_summarize_chain(
-                self.model, chain_type=chain_type, question_prompt=prompt, refine_prompt=refine_prompt
+                self.model, chain_type=chain_type, question_prompt=prompt, refine_prompt=refine_prompt,
+                return_intermediate_steps=True,
+                # input_key=self.chain_keys["input"], output_key=self.chain_keys["output"],
             )
         else:
             self.chain = load_summarize_chain(self.model, chain_type=chain_type)  # "stuff", "refine"
-
-    def init_stuff_chain(self):
-        # chain api
-        prompt = PromptTemplate.from_template(self.SUMMARY_PROMPT["stuff"])
-        self.llm_chain = LLMChain(llm=self.model, prompt=prompt)
-        self.chain = StuffDocumentsChain(llm_chain=self.llm_chain, document_variable_name="text")
-
-    def init_refine_chain(self):
-        # chain api
-        prompt = PromptTemplate.from_template(self.SUMMARY_PROMPT["summary"])
-        refine_prompt = PromptTemplate.from_template(self.SUMMARY_PROMPT["refine"])
-        self.chain = load_summarize_chain(
-            llm=self.model, chain_type="refine", question_prompt=prompt, refine_prompt=refine_prompt,
-            return_intermediate_steps=True,  # input_key=self.chain_keys["input"], output_key=self.chain_keys["output"],
-        )
 
     def init_analyze_chain(self, chain_type):
         """
@@ -326,9 +315,9 @@ Create a new model by parsing and validating input data from keyword arguments.
 
     def init_map_reduce_chain(self):
         # map-reduce api
-        map_prompt = PromptTemplate.from_template(self.SUMMARY_PROMPT["map"])
+        map_prompt = PromptTemplate(template=self.SUMMARY_PROMPT["map"], input_variables=["text"])
         map_chain = LLMChain(llm=self.model, prompt=map_prompt)
-        reduce_prompt = PromptTemplate.from_template(self.SUMMARY_PROMPT["reduce"])
+        reduce_prompt = PromptTemplate(template=self.SUMMARY_PROMPT["reduce"], input_variables=["text"])
         reduce_chain = LLMChain(llm=self.model, prompt=reduce_prompt)
         combine_documents_chain = StuffDocumentsChain(llm_chain=reduce_chain, document_variable_name="text")
         reduce_documents_chain = ReduceDocumentsChain(
@@ -380,8 +369,9 @@ Create a new model by parsing and validating input data from keyword arguments.
         self.retriever = self.vectorstore.as_retriever()
 
         # chains
-        prompt = PromptTemplate.from_template(
-            self.CHATBOT_PROMPT["retrievalqa" + "_" + self.memory_mode if self.memory_mode else ""])
+        prompt = PromptTemplate(
+            template=self.CHATBOT_PROMPT["retrievalqa" + "_" + self.memory_mode if self.memory_mode else ""],
+            input_variables=["text"])
         chain = LLMChain(llm=self.model, prompt=prompt, verbose=True)
         combine_documents_chain = StuffDocumentsChain(llm_chain=chain, document_variable_name="text")
 
@@ -445,7 +435,7 @@ Create a new model by parsing and validating input data from keyword arguments.
                 else:
                     summaries_doc_fortoken = summaries_doc
                 summaries_tokens = [self.count_tokens(doc.page_content) for doc in summaries_doc_fortoken]
-                self.reduce_chain.token_max = sum(summaries_tokens) + self.max_new_tokens
+                self.reduce_chain.token_max = sum(summaries_tokens) + self.token_limit
                 logger.info('Updated the summaries token %d: %s to %d' % (
                     sum(summaries_tokens), str(summaries_tokens), self.reduce_chain.token_max))
 
@@ -522,12 +512,18 @@ class ChatBot(LangChain):
         # Chain
         if self.chain is not None:
             _module, input_val = self.chain, self.documents
-            if 'refine' == self.chain_mode:
+
+            # input value
+            if 'analyze' in self.chain_mode:
+                input_val = self.origin_text
+            elif 'refine' in self.chain_mode:
                 input_val = {"input_documents": self.documents}  # "\n\n".join(result["intermediate_steps"][:3])
+
+            # module & output key
+            if 'refine' in self.chain_mode and 'analyze' not in self.chain_mode:
+                output_key = self.chain_keys["output"]
             elif 'rag_map_reduce' not in self.chain_mode:
                 _module = self.chain.run
-                if 'analyze' in self.chain_mode:
-                    input_val = self.origin_text
 
         # Agent
         if self.agent is not None:

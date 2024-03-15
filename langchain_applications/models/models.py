@@ -148,7 +148,7 @@ class Gemma(ChatBot):
 
 class Zephyr(ChatBot):
     TOKEN_LIMIT = 2048  # 8192
-    MAX_NEW_TOKENS = 512  # 2048
+    MAX_NEW_TOKENS = 10  # 512  # 2048
     MAX_PROMPT_LENGTH = 200
     CHUNK_OVERLAP = 0
     SPLIT_DOCS = True
@@ -262,7 +262,7 @@ class Gemini(ChatBot):
     # CHUNK_OVERLAP = 0
     # SPLIT_DOCS = True
     HISTORY_LENGTH = 100000
-    GOOGLE_API_KEY = "AIzaSyC3d_lzyoPTqGgxiifPUexS6Ro7GcqLgvc"  # Gmail User Name: marcowu1999
+    GOOGLE_API_KEY = "AIzaSyDPmH3sbLY5-EpQmxqeQcPyhosTgAWE6iY"  # Gmail User Name: marcowu1999
 
     def __init__(self, **kwargs):
         # [Langchain]
