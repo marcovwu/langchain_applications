@@ -9,6 +9,11 @@ pip install -e .
 
 # deploy mode
 # pip install git+https://github.com/marcovwu/langchain_applications.git
+
+# [OPTION] BlueLM bit4
+git clone https://github.com/vivo-ai-lab/BlueLM.git
+cd BlueLM/quant_cuda
+python setup_cuda.py install
 ```
 
 ## Run

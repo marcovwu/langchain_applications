@@ -40,6 +40,7 @@ class LangChain(PromptManager):
     CHUNK_SIZE = TOKEN_LIMIT  # will exceed token length
     CHUNK_OVERLAP = 0
     SPLIT_DOCS = False
+    HISTORY_LENGTH = CHUNK_SIZE  # will exceed token length
 
     # Options
     SUPPORT_FORMATS = [".pdf", ".doc", ".txt", ".md"]
@@ -184,7 +185,7 @@ class LangChain(PromptManager):
         self.max_prompt_length = self.MAX_PROMPT_LENGTH
         self.chunk_size = min(self.CHUNK_SIZE, self.token_limit - self.max_new_tokens - self.max_prompt_length)
         self.chunk_overlap = self.CHUNK_OVERLAP
-        self.history_length = self.chunk_size
+        self.history_length = self.HISTORY_LENGTH
 
     def count_tokens(self, string):
         return self.model.get_num_tokens(string)

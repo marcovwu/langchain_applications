@@ -90,6 +90,21 @@ Your response should be at least three paragraphs and fully encompass what was s
 
 FULL SUMMARY:
 """,
+        "map_paper": """
+You will be given a single passage of a paper. This section will be enclosed in triple backticks (```)
+Your goal is to give a summary of this section so that a reader will have a full understanding of the paper proposed.
+Your response should consist of at least three paragraphs and fully encompass the content conveyed in the passage.
+
+```{text}```
+
+Write a concise summary about 500 words:
+""",
+        "map_meeting": """%s
+
+```{text}```
+
+FULL SUMMARY:
+""" % PROMPT_MAP_MEETING,
         "map_all": """
 You will receive a passage of a story, article, speech, interview, meeting, or similar content.
 This section will be enclosed in triple backticks (```).
@@ -101,12 +116,6 @@ Your response should consist of at least three paragraphs and fully encompass th
 
 FULL SUMMARY:
 """,
-        "map_meeting": """%s
-
-```{text}```
-
-FULL SUMMARY:
-""" % PROMPT_MAP_MEETING,
         "combine_book": """
 You will be given a series of summaries from a book. The summaries will be enclosed in triple backticks (```)
 Your goal is to give a verbose summary of what happened in the story.
@@ -116,6 +125,21 @@ The reader should be able to grasp what happened in the book.
 
 VERBOSE SUMMARY:
 """,
+        "combine_paper": """
+You will be given a series of summaries from a paper. The summaries will be enclosed in triple backticks (```)
+Your goal is to provide a verbose summary contain abstract problem, proposed method, and result from the summaries.
+The reader should be able to grasp the key-problem, proposed method, and result in the paper.
+
+```{text}```
+
+Write a verbose summary approximately 1000 words long:
+""",
+        "combine_meeting": """%s
+
+```{text}```
+
+VERBOSE SUMMARY:
+""" % PROMPT_COMBINE_MEETING,
         "combine_all": """
 You will be given a series of summaries. The summaries will be enclosed in triple backticks (```).
 Your goal is to provide a detailed summary of the content, approximately 1000 words long.
@@ -128,12 +152,6 @@ emphasis on key points, and other characteristics.
 
 VERBOSE SUMMARY:
 """,
-        "combine_meeting": """%s
-
-```{text}```
-
-VERBOSE SUMMARY:
-""" % PROMPT_COMBINE_MEETING,
         "level1": """
 Please provide a summary of the following text.
 Please provide your output in a manner that a 5 year old would understand
@@ -145,5 +163,5 @@ such as those about existence, reason, knowledge, values, mind, and language. \
 Some sources claim the term was coined by Pythagoras (c. 570 – c. 495 BCE), \
 although this theory is disputed by some. Philosophical methods include questioning, \
 critical discussion, rational argument, and systematic presentation.
-"""
+""",
     }

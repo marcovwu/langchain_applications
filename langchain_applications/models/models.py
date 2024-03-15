@@ -3,10 +3,11 @@ import os
 from loguru import logger
 
 from langchain_applications.utils.tools import ChatBot  # noqa: E402
+from langchain_applications.models.customize import HuggingFaceBlueLM
 
 
 class LLMRunner(ChatBot):
-    LLM_CHOICES = "'Llama', 'MiniCPM', 'Gemma', 'Zephyr', 'MeetingSummary' or 'Gemini'"
+    LLM_CHOICES = "'Llama', 'MiniCPM', 'BlueLM', 'Vicuna', 'Zephyr', 'MeetingSummary', 'Gemma' or 'Gemini'"
 
     @classmethod
     def load(cls, llmname, **kwargs):
@@ -107,6 +108,49 @@ class MiniCPM(ChatBot):
         return len(self.llm.tokenizer(string)["input_ids"])
 
 
+class BlueLM(ChatBot):
+    TOKEN_LIMIT = 2048
+    MAX_NEW_TOKENS = 512
+    MAX_PROMPT_LENGTH = 200
+    CHUNK_OVERLAP = 100
+    SPLIT_DOCS = True
+
+    def __init__(self, **kwargs):
+        self.model = HuggingFaceBlueLM(
+            # model_name="vivo-ai/BlueLM-7B-Chat-4bits",
+            model_name="/data1/marco.wu/models/Large_Language_Model/BlueLM-7B-Chat",  # will out of memory
+            max_new_tokens=self.MAX_NEW_TOKENS, repetition_penalty=1.1)
+
+        # Initialize
+        super().__init__(self.model, **kwargs)
+
+    def count_tokens(self, string):
+        return len(self.model.tokenizer(string)["input_ids"])
+
+
+class Vicuna(ChatBot):
+    TOKEN_LIMIT = 2048
+    MAX_NEW_TOKENS = 512
+    MAX_PROMPT_LENGTH = 200
+    CHUNK_OVERLAP = 100
+    SPLIT_DOCS = True
+
+    def __init__(self, **kwargs):
+        import torch
+        from transformers import pipeline
+        from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
+        self.llm = pipeline(
+            "text-generation", model="/data1/marco.wu/models/Large_Language_Model/vicuna-7b-v1.5",
+            torch_dtype=torch.bfloat16, device_map="auto", max_new_tokens=self.MAX_NEW_TOKENS)
+        self.model = HuggingFacePipeline(pipeline=self.llm)
+
+        # Initialize
+        super().__init__(self.model, **kwargs)
+
+    def count_tokens(self, string):
+        return len(self.llm.tokenizer(string)["input_ids"])
+
+
 class Gemma(ChatBot):
     TOKEN_LIMIT = 2048
     MAX_NEW_TOKENS = 512
@@ -148,7 +192,7 @@ class Gemma(ChatBot):
 
 class Zephyr(ChatBot):
     TOKEN_LIMIT = 2048  # 8192
-    MAX_NEW_TOKENS = 10  # 512  # 2048
+    MAX_NEW_TOKENS = 512  # 2048
     MAX_PROMPT_LENGTH = 200
     CHUNK_OVERLAP = 0
     SPLIT_DOCS = True
