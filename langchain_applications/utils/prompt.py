@@ -56,6 +56,9 @@ Helpful answer:
 """
     }
     SUMMARY_PROMPT = {
+        "stuff": """Write a concise summary of the following about 1000 words:
+"{text}"
+CONCISE SUMMARY:""",
         "summary": """Write a concise summary of the following about 1000 words:
 "{text}"
 CONCISE SUMMARY:""",

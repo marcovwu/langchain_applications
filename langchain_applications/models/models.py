@@ -23,7 +23,7 @@ class Llama(ChatBot):
     TOKEN_LIMIT = 2048
     MAX_NEW_TOKENS = 512
     MAX_PROMPT_LENGTH = 200
-    CHUNK_OVERLAP = 0
+    CHUNK_OVERLAP = 100
     SPLIT_DOCS = True
 
     def __init__(self, **kwargs):
@@ -44,10 +44,38 @@ class Llama(ChatBot):
         # max_new_tokens + input tokens must <= token limit
         self.llm = pipeline(
             "text-generation", model="/data1/marco.wu/models/Large_Language_Model/chinese-alpaca-2-7b",
-            torch_dtype=torch.bfloat16, device_map="auto", max_new_tokens=self.MAX_NEW_TOKENS)
+            device_map="auto", max_new_tokens=self.MAX_NEW_TOKENS, torch_dtype=torch.bfloat16, repetition_penalty=1.1
+            # pipeline_kwargs={
+            #     "max_new_tokens": self.MAX_NEW_TOKENS,
+            #     "do_sample": True,
+            #     "temperature": 0.2,
+            #     "top_k": 40,
+            #     "top_p": 0.9,
+            #     "repetition_penalty": 1.1
+            # },
+            # model_kwargs={"torch_dtype": torch.bfloat16, "low_cpu_mem_usage": True, "trust_remote_code": True}
+        )
         self.model = HuggingFacePipeline(pipeline=self.llm)
 
         # Initialize
+        self.SUMMARY_PROMPT["stuff"] = self.SUMMARY_PROMPT["summary"] = (
+            "[INST] <<SYS>>\n"
+            "You are a helpful assistant. 你是一个乐于助人的助手。\n"
+            "<</SYS>>\n\n"
+            "请为以下文字写一段摘要:\n{text} [/INST]"
+        )
+        self.SUMMARY_PROMPT["refine"] = (
+            "[INST] <<SYS>>\n"
+            "You are a helpful assistant. 你是一个乐于助人的助手。\n"
+            "<</SYS>>\n\n"
+            "已有一段摘要：{existing_answer}\n"
+            "现在还有一些文字，（如果有需要）你可以根据它们完善现有的摘要。"
+            "\n"
+            "{text}\n"
+            "\n"
+            "如果这段文字没有用，返回原来的摘要即可。请你生成一个最终的摘要。"
+            " [/INST]"
+        )
         super().__init__(self.model, **kwargs)
 
     def count_tokens(self, string):
@@ -58,7 +86,7 @@ class MiniCPM(ChatBot):
     TOKEN_LIMIT = 2048
     MAX_NEW_TOKENS = 512
     MAX_PROMPT_LENGTH = 200
-    CHUNK_OVERLAP = 0
+    CHUNK_OVERLAP = 100
     SPLIT_DOCS = True
 
     def __init__(self, **kwargs):
@@ -119,18 +147,11 @@ class Gemma(ChatBot):
 
 
 class Zephyr(ChatBot):
-    TOKEN_LIMIT = 8192
-    MAX_NEW_TOKENS = 2048
+    TOKEN_LIMIT = 2048  # 8192
+    MAX_NEW_TOKENS = 512  # 2048
     MAX_PROMPT_LENGTH = 200
     CHUNK_OVERLAP = 0
     SPLIT_DOCS = True
-    ChatBot.SUMMARY_PROMPT["summary"] = """<|system|>\nWrite a concise summary of the following about 1000 words:</s>
-<|assistant|>
-"{text}"</s>
-
-<|user|>
-CONCISE SUMMARY:</s>""",
-    ChatBot.CHATBOT_PROMPT["default"] = f"<|system|>\n{ChatBot.CHATBOT_PROMPT['default']}</s>\n",
 
     def __init__(self, **kwargs):
         import torch
@@ -142,6 +163,33 @@ CONCISE SUMMARY:</s>""",
         self.model = HuggingFacePipeline(pipeline=self.llm)
 
         # Initialize
+        self.SUMMARY_PROMPT["summary"] = """<|system|>
+Write a concise summary of the following about 1000 words:</s>
+<|assistant|>
+"{text}"</s>
+<|user|>
+CONCISE SUMMARY:</s>"""
+        self.SUMMARY_PROMPT["map_paper"] = """<|system|>
+You will be given a single passage of a paper. This section will be enclosed in triple backticks (```)
+Your goal is to give a summary of this section so that a reader will have a full understanding of the paper proposed.
+Your response should consist of at least three paragraphs and fully encompass the content conveyed in the passage.
+
+```{text}```</s>
+<|user|>
+Write a concise summary about 500 words:</s>
+<|assistant|>
+"""
+        self.SUMMARY_PROMPT["combine_paper"] = """<|system|>
+You will be given a series of summaries from a paper. The summaries will be enclosed in triple backticks (```)
+Your goal is to provide a verbose summary contain abstract problem, proposed method, and result from the summaries.
+The reader should be able to grasp the key-problem, proposed method, and result in the paper.
+
+```{text}```</s>
+<|user|>
+Write a verbose summary approximately 1000 words long:</s>
+<|assistant|>
+"""
+        self.CHATBOT_PROMPT["default"] = f"<|system|>\n{self.CHATBOT_PROMPT['default']}</s>\n"
         super().__init__(self.model, **kwargs)
 
     def count_tokens(self, string):
@@ -208,6 +256,11 @@ class MeetingSummary(ChatBot):
 
 
 class Gemini(ChatBot):
+    # TOKEN_LIMIT = 8192
+    # MAX_NEW_TOKENS = 2048
+    # MAX_PROMPT_LENGTH = 200
+    # CHUNK_OVERLAP = 0
+    # SPLIT_DOCS = True
     HISTORY_LENGTH = 100000
     GOOGLE_API_KEY = "AIzaSyC3d_lzyoPTqGgxiifPUexS6Ro7GcqLgvc"  # Gmail User Name: marcowu1999
 

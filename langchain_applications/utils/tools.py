@@ -37,14 +37,16 @@ class LangChain(PromptManager):
     TOKEN_LIMIT = 2048
     MAX_NEW_TOKENS = 512
     MAX_PROMPT_LENGTH = 200
+    CHUNK_SIZE = TOKEN_LIMIT  # will exceed token length
     CHUNK_OVERLAP = 0
     SPLIT_DOCS = False
 
     # Options
     SUPPORT_FORMATS = [".pdf", ".doc", ".txt", ".md"]
     MEMORY_MODE_CHOICES = "'default', 'langchain_default', 'conversation_summary', 'conversation_buffer'"
-    CHAIN_MODE_CHOICES = "'summary-stuff', 'summary-refine', 'summary-map_reduce', 'stuff', 'refine', 'analyze'" + \
-        ", 'map_reduce' 'rag_map_reduce-stuff, rag_map_reduce-refine', 'rag_retrieval'"
+    CHAIN_MODE_CHOICES = "'summary-stuff', 'summary-refine', 'summary-map_reduce', 'stuff', 'refine', " + \
+        "'analyze-stuff', 'analyze-refine', 'map_reduce' 'rag_map_reduce-stuff, rag_map_reduce-refine', " + \
+        "'rag_retrieval'"
     AGENT_MODE_CHOICE = "'wiki'"
 
     def __init__(self, model, input_info='', memory_mode='', chain_mode='', agent_mode=''):
@@ -94,7 +96,7 @@ class LangChain(PromptManager):
         elif 'refine' == self.chain_mode:
             self.init_refine_chain()
         elif 'analyze' in self.chain_mode:
-            self.init_analyze_chain(chain=load_summarize_chain(self.model, chain_type='refine'))
+            self.init_analyze_chain(chain_type=self.chain_mode.split('-')[1])
         elif 'map_reduce' == self.chain_mode:
             self.init_map_reduce_chain()
         elif 'rag_map_reduce' in self.chain_mode:
@@ -180,7 +182,7 @@ class LangChain(PromptManager):
         self.token_limit = self.TOKEN_LIMIT
         self.max_new_tokens = self.MAX_NEW_TOKENS
         self.max_prompt_length = self.MAX_PROMPT_LENGTH
-        self.chunk_size = self.token_limit - self.max_new_tokens - self.max_prompt_length
+        self.chunk_size = min(self.CHUNK_SIZE, self.token_limit - self.max_new_tokens - self.max_prompt_length)
         self.chunk_overlap = self.CHUNK_OVERLAP
         self.history_length = self.chunk_size
 
@@ -250,13 +252,7 @@ class LangChain(PromptManager):
                 self.origin_text, self.documents = "no input ...", [Document(page_content="")]
 
             # split
-            if (
-                self.SPLIT_DOCS and (
-                    'refine' == self.chain_mode
-                    or 'rag_map_reduce' in self.chain_mode
-                    or 'map_reduce' == self.chain_mode
-                )
-            ):
+            if self.SPLIT_DOCS:
                 logger.info('Starting to split the input documents ...')
                 self.documents = self.text_splitter.split_documents(self.documents)
 
@@ -289,11 +285,21 @@ class LangChain(PromptManager):
 
     def init_summary_chain(self, chain_type='stuff'):
         # summary api
-        self.chain = load_summarize_chain(self.model, chain_type=chain_type)  # "stuff", "refine"
+        if chain_type == "stuff":
+            prompt = PromptTemplate.from_template(self.SUMMARY_PROMPT["stuff"])
+            self.chain = load_summarize_chain(self.model, chain_type=chain_type, prompt=prompt)
+        elif chain_type == "refine":
+            prompt = PromptTemplate.from_template(self.SUMMARY_PROMPT["summary"])
+            refine_prompt = PromptTemplate.from_template(self.SUMMARY_PROMPT["refine"])
+            self.chain = load_summarize_chain(
+                self.model, chain_type=chain_type, question_prompt=prompt, refine_prompt=refine_prompt
+            )
+        else:
+            self.chain = load_summarize_chain(self.model, chain_type=chain_type)  # "stuff", "refine"
 
     def init_stuff_chain(self):
         # chain api
-        prompt = PromptTemplate.from_template(self.SUMMARY_PROMPT["summary"])
+        prompt = PromptTemplate.from_template(self.SUMMARY_PROMPT["stuff"])
         self.llm_chain = LLMChain(llm=self.model, prompt=prompt)
         self.chain = StuffDocumentsChain(llm_chain=self.llm_chain, document_variable_name="text")
 
@@ -306,12 +312,22 @@ class LangChain(PromptManager):
             return_intermediate_steps=True,  # input_key=self.chain_keys["input"], output_key=self.chain_keys["output"],
         )
 
-    def init_analyze_chain(self, chain):
+    def init_analyze_chain(self, chain_type):
+        """
+        Chain that splits documents, then analyzes it in pieces.
+
+This chain is parameterized by a TextSplitter and a CombineDocumentsChain. This chain takes a single document as input,
+and then splits it up into chunks and then passes those chucks to the CombineDocumentsChain.
+
+Create a new model by parsing and validating input data from keyword arguments.
+        """
+        chain = load_summarize_chain(llm=self.model, chain_type=chain_type)
         self.chain = AnalyzeDocumentChain(combine_docs_chain=chain, text_splitter=self.text_splitter)
 
     def init_map_reduce_chain(self):
         # map-reduce api
-        map_chain = LLMChain(llm=self.model, prompt=self.SUMMARY_PROMPT["map"])
+        map_prompt = PromptTemplate.from_template(self.SUMMARY_PROMPT["map"])
+        map_chain = LLMChain(llm=self.model, prompt=map_prompt)
         reduce_prompt = PromptTemplate.from_template(self.SUMMARY_PROMPT["reduce"])
         reduce_chain = LLMChain(llm=self.model, prompt=reduce_prompt)
         combine_documents_chain = StuffDocumentsChain(llm_chain=reduce_chain, document_variable_name="text")
@@ -338,11 +354,12 @@ class LangChain(PromptManager):
         """
 
         # map
-        map_prompt_template = PromptTemplate(template=self.SUMMARY_PROMPT["map_book"], input_variables=["text"])
+        map_prompt_template = PromptTemplate(template=self.SUMMARY_PROMPT["map_paper"], input_variables=["text"])
         self.map_chain = load_summarize_chain(llm=self.model, chain_type=chain_type, prompt=map_prompt_template)
 
         # reduce
-        combine_prompt_template = PromptTemplate(template=self.SUMMARY_PROMPT["combine_book"], input_variables=["text"])
+        combine_prompt_template = PromptTemplate(
+            template=self.SUMMARY_PROMPT["combine_paper"], input_variables=["text"])
         # self.reduce_chain = load_summarize_chain(llm=self.model, chain_type=chain_type, prompt=combine_prompt_template
         reduce_chain = LLMChain(llm=self.model, prompt=combine_prompt_template)
         combine_documents_chain = StuffDocumentsChain(llm_chain=reduce_chain, document_variable_name="text")
@@ -506,13 +523,10 @@ class ChatBot(LangChain):
         if self.chain is not None:
             _module, input_val = self.chain, self.documents
             if 'refine' == self.chain_mode:
-                _module = self.chain
                 input_val = {"input_documents": self.documents}  # "\n\n".join(result["intermediate_steps"][:3])
-            elif 'rag_map_reduce' in self.chain_mode:
-                _module = self.chain
-            else:
+            elif 'rag_map_reduce' not in self.chain_mode:
                 _module = self.chain.run
-                if 'analyze' == self.chain_mode:
+                if 'analyze' in self.chain_mode:
                     input_val = self.origin_text
 
         # Agent
